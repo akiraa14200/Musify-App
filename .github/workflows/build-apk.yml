@@ -30,7 +30,6 @@ jobs:
             echo "Could not find Android SDK sdkmanager under $SDK_ROOT/cmdline-tools"
             exit 1
           fi
-          yes | "$SDKMANAGER" --licenses >/dev/null
           "$SDKMANAGER" "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Verify Gradle wrapper
