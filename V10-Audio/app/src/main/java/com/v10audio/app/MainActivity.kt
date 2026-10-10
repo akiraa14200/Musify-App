@@ -3,6 +3,11 @@ package com.v10audio.app
 import android.content.ComponentName
 import android.net.Uri
 import android.os.Bundle
+import android.Manifest
+import android.content.pm.PackageManager
+import android.provider.MediaStore
+import android.os.Build
+import android.content.ContentUris
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -36,6 +41,9 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -85,9 +93,39 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
     var artist by remember { mutableStateOf("") }
     var streamUrl by remember { mutableStateOf("") }
     var dialog by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf("Add a direct audio URL or choose a local file.") }
+    var message by remember { mutableStateOf("Scan your device to import downloaded songs.") }
+    val scope = rememberCoroutineScope()
 
+    suspend fun scanDeviceSongs() {
+        val imported = withContext(Dispatchers.IO) {
+            val found = mutableListOf<Track>()
+            val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+            val projection = arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST)
+            context.contentResolver.query(collection, projection, null, null, "title COLLATE NOCASE ASC")?.use { cursor ->
+                val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idCol)
+                    val uri = ContentUris.withAppendedId(collection, id).toString()
+                    val name = cursor.getString(titleCol)?.takeIf { it.isNotBlank() } ?: "Unknown title"
+                    val performer = cursor.getString(artistCol)?.takeIf { it.isNotBlank() && it != "<unknown>" } ?: "Unknown artist"
+                    found.add(Track(name, performer, uri))
+                }
+            }
+            found
+        }
+        var added = 0
+        imported.forEach { t -> if (tracks.none { it.uri == t.uri }) { tracks.add(t); added++ } }
+        save()
+        message = if (imported.isEmpty()) "No indexed audio found. Make sure downloaded files are stored on this device." else "Scan complete: " + imported.size + " songs found; " + added + " new songs added."
+    }
+    val audioPermission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
+    val scanPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) scope.launch { message = "Scanning device music…"; scanDeviceSongs() } else message = "Allow audio access to scan music on this device."
+    }
     LaunchedEffect(Unit) {
+        if (ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED) scanDeviceSongs()
         for (i in 0..80) { val c = controllerProvider(); if (c != null) { player = c; break }; delay(150) }
     }
     DisposableEffect(player) {
@@ -125,7 +163,7 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
         Scaffold(containerColor = bg, bottomBar = {
             Row(Modifier.fillMaxWidth().background(Color(0xEE211A1C)).padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { dialog = true }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = fg)) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(4.dp)); Text("Stream URL") }
-                OutlinedButton(onClick = { picker.launch(arrayOf("audio/*")) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = fg)) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(4.dp)); Text("Device audio") }
+                OutlinedButton(onClick = { if (ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED) scope.launch { message = "Scanning device music…"; scanDeviceSongs() } else scanPermission.launch(audioPermission) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = fg)) { Icon(Icons.Default.GraphicEq, null); Spacer(Modifier.width(4.dp)); Text("Scan all songs") }
             }
         }) { pad ->
             Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF35161C), bg, bg))).padding(pad).padding(horizontal = 18.dp)) {
@@ -170,6 +208,7 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
                         }
                     }
                 }
+                OutlinedButton(onClick = { picker.launch(arrayOf("audio/*")) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.outlinedButtonColors(contentColor = muted)) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(6.dp)); Text("Browse for one audio file") }
                 Text(message, color = muted, fontSize = 10.sp, maxLines = 2, modifier = Modifier.padding(vertical = 4.dp))
                 if (active in tracks.indices) {
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color(0xFF261D1F)).padding(horizontal = 12.dp, vertical = 6.dp)) {
