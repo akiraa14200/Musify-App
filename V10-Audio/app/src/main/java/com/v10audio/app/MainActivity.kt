@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -99,6 +100,7 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
     var message by remember { mutableStateOf("Scan your device to import downloaded songs.") }
     var resolving by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
+    var nowPlayingOpen by remember { mutableStateOf(false) }
     var dynamicTheme by remember { mutableStateOf(prefs.getBoolean("dynamic_theme", true)) }
     var playerStyle by remember { mutableStateOf(prefs.getString("player_style", "Modern") ?: "Modern") }
     var backgroundStyle by remember { mutableStateOf(prefs.getString("background_style", "Glass") ?: "Glass") }
@@ -204,7 +206,7 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
     MaterialTheme(colorScheme = darkColorScheme(primary = accent, background = screenBackground, surface = Color(0xFF211A1C), onBackground = fg, onSurface = fg)) {
         Scaffold(containerColor = screenBackground, bottomBar = {
             Row(Modifier.fillMaxWidth().background(Color(0xEE211A1C)).padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { dialog = true }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = fg)) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(4.dp)); Text("Stream URL") }
+                OutlinedButton(onClick = { if (ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED) scope.launch { message = "Refreshing device music…"; scanDeviceSongs() } else scanPermission.launch(audioPermission) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = fg)) { Icon(Icons.Default.Refresh, null); Spacer(Modifier.width(4.dp)); Text("Refresh library") }
                 OutlinedButton(onClick = { if (ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED) scope.launch { message = "Scanning device music…"; scanDeviceSongs() } else scanPermission.launch(audioPermission) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = fg)) { Icon(Icons.Default.GraphicEq, null); Spacer(Modifier.width(4.dp)); Text("Scan all songs") }
             }
         }) { pad ->
@@ -220,7 +222,7 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
                 Text("GOOD SOUND, NO NOISE.", color = accent, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 2.sp)
                 Text("Made for the\nway you listen.", color = fg, fontWeight = FontWeight.Bold, fontSize = 34.sp, lineHeight = 38.sp)
                 Spacer(Modifier.height(16.dp))
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(if (playerStyle == "Minimal") Color.Transparent else Color.White.copy(alpha = if (backgroundStyle == "Glass") .07f else .04f)).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(if (playerStyle == "Minimal") Color.Transparent else Color.White.copy(alpha = if (backgroundStyle == "Glass") .07f else .04f)).clickable { if (active in tracks.indices) nowPlayingOpen = true }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Waves, null, tint = accent, modifier = Modifier.size(38.dp))
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
@@ -236,12 +238,12 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
                 if (shown.isEmpty()) {
                     Column(Modifier.fillMaxWidth().padding(top = 20.dp).clip(RoundedCornerShape(18.dp)).background(Color.White.copy(alpha = .04f)).padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Your music starts here", color = fg, fontWeight = FontWeight.SemiBold)
-                        Text("Add a direct media URL or choose a local audio file.", color = muted, fontSize = 12.sp)
+                        Text("Scan your phone to find downloaded songs and audio files.", color = muted, fontSize = 12.sp)
                     }
                 } else LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 10.dp)) {
                     itemsIndexed(shown, key = { _, it -> it.value.uri }) { _, entry ->
                         val i = entry.index; val t = entry.value
-                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { playIndex(i) }.padding(vertical = 7.dp, horizontal = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { playIndex(i); nowPlayingOpen = true }.padding(vertical = 7.dp, horizontal = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(accent.copy(alpha = .16f)), contentAlignment = Alignment.Center) { if (active == i && playing) Icon(Icons.Default.GraphicEq, null, tint = accent) else Text("${i + 1}".padStart(2, '0'), color = muted, fontSize = 12.sp) }
                             Spacer(Modifier.width(11.dp))
                             Column(Modifier.weight(1f)) { Text(t.title, color = fg, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp); Text(t.artist, color = muted, fontSize = 11.sp, maxLines = 1) }
@@ -250,7 +252,7 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
                         }
                     }
                 }
-                OutlinedButton(onClick = { picker.launch(arrayOf("audio/*")) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.outlinedButtonColors(contentColor = muted)) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(6.dp)); Text("Browse for one audio file") }
+                OutlinedButton(onClick = { picker.launch(arrayOf("audio/*")) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.outlinedButtonColors(contentColor = muted)) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(6.dp)); Text("Import a local audio file") }
                 Text(message, color = muted, fontSize = 10.sp, maxLines = 2, modifier = Modifier.padding(vertical = 4.dp))
                 if (active in tracks.indices) {
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color(0xFF261D1F)).padding(horizontal = 12.dp, vertical = 6.dp)) {
@@ -267,6 +269,60 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
             }
         }
     }
+
+    if (nowPlayingOpen && active in tracks.indices) {
+        val currentTrack = tracks[active]
+        Dialog(onDismissRequest = { nowPlayingOpen = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+            Surface(modifier = Modifier.fillMaxSize(), color = screenBackground) {
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(accent.copy(alpha = .28f), screenBackground, screenBackground)))) {
+                    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { nowPlayingOpen = false }) { Icon(Icons.Default.KeyboardArrowDown, "Close player", tint = fg) }
+                            Spacer(Modifier.weight(1f))
+                            Text("NOW PLAYING", color = muted, fontSize = 11.sp, letterSpacing = 2.sp)
+                            Spacer(Modifier.weight(1f))
+                            IconButton(onClick = { settingsOpen = true }) { Icon(Icons.Default.Tune, "Player settings", tint = fg) }
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(if (playerStyle == "Minimal") 14.dp else 30.dp)).background(Brush.linearGradient(listOf(accent, Color(0xFF211A1C), accent.copy(alpha = .45f)))), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.Album, null, tint = Color.White, modifier = Modifier.size(100.dp))
+                                Spacer(Modifier.height(12.dp))
+                                Text("V10 AUDIO", color = Color.White.copy(alpha = .75f), fontSize = 12.sp, letterSpacing = 4.sp)
+                            }
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(currentTrack.title, color = fg, fontWeight = FontWeight.Bold, fontSize = 22.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Spacer(Modifier.height(5.dp))
+                                Text(currentTrack.artist, color = muted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            IconButton(onClick = { if (currentTrack.uri in favorites) favorites.remove(currentTrack.uri) else favorites.add(currentTrack.uri); save() }) {
+                                Icon(if (currentTrack.uri in favorites) Icons.Default.Favorite else Icons.Default.FavoriteBorder, "Favorite", tint = if (currentTrack.uri in favorites) accent else muted, modifier = Modifier.size(28.dp))
+                            }
+                        }
+                        Spacer(Modifier.height(14.dp))
+                        Slider(value = if (dur > 0) pos.toFloat().coerceIn(0f, dur.toFloat()) else 0f, onValueChange = { pos = it.toLong() }, onValueChangeFinished = { player?.seekTo(pos) }, valueRange = 0f..dur.coerceAtLeast(1).toFloat(), colors = SliderDefaults.colors(thumbColor = accent, activeTrackColor = accent))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("${pos / 60000}:${((pos / 1000) % 60).toString().padStart(2, '0')}", color = muted, fontSize = 11.sp)
+                            Text(if (dur > 0) "-${((dur-pos).coerceAtLeast(0))/60000}:${((((dur-pos).coerceAtLeast(0))/1000)%60).toString().padStart(2, '0')}" else "--:--", color = muted, fontSize = 11.sp)
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { player?.seekToPreviousMediaItem() }, modifier = Modifier.size(56.dp)) { Icon(Icons.Default.SkipPrevious, "Previous", tint = fg, modifier = Modifier.size(34.dp)) }
+                            IconButton(onClick = { if (playing) player?.pause() else player?.play() }, modifier = Modifier.size(76.dp).clip(CircleShape).background(accent)) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause" else "Play", tint = Color.White, modifier = Modifier.size(42.dp)) }
+                            IconButton(onClick = { player?.seekToNextMediaItem() }, modifier = Modifier.size(56.dp)) { Icon(Icons.Default.SkipNext, "Next", tint = fg, modifier = Modifier.size(34.dp)) }
+                        }
+                        Spacer(Modifier.weight(.8f))
+                        Text("LOCAL LIBRARY", color = muted, fontSize = 10.sp, letterSpacing = 1.5.sp)
+                        Spacer(Modifier.height(14.dp))
+                    }
+                }
+            }
+        }
+    }
+
     if (settingsOpen) AlertDialog(
         onDismissRequest = { settingsOpen = false },
         title = { Text("Appearance & player", color = fg) },
