@@ -83,7 +83,7 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
     val tracks = remember {
         val a = runCatching { JSONArray(prefs.getString("tracks", "[]")) }.getOrDefault(JSONArray())
         mutableStateListOf<Track>().apply { for (i in 0 until a.length()) runCatching {
-            val o = a.getJSONObject(i); add(Track(o.optString("title"), o.optString("artist"), o.optString("uri")))
+            val o = a.getJSONObject(i); if (Uri.parse(o.optString("uri")).scheme == "content") add(Track(o.optString("title"), o.optString("artist"), o.optString("uri")) )
         } }
     }
     val favorites = remember { mutableStateListOf<String>().apply { addAll(prefs.getStringSet("favorites", emptySet()) ?: emptySet()) } }
