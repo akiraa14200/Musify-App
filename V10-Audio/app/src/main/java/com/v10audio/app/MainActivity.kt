@@ -103,6 +103,10 @@ private fun V10Root(controllerProvider: () -> MediaController?) {
     var player by remember { mutableStateOf<MediaController?>(null) }
     var screen by remember { mutableStateOf("Home") }
     var search by remember { mutableStateOf("") }
+    var onlineQuery by remember { mutableStateOf("") }
+    var onlineResults by remember { mutableStateOf<List<OnlineTrack>>(emptyList()) }
+    var onlineLoading by remember { mutableStateOf(false) }
+    var onlineMessage by remember { mutableStateOf("Search YouTube Music to discover tracks.") }
     var libraryFilter by remember { mutableStateOf("All songs") }
     var activeUri by remember { mutableStateOf("") }
     var isPlaying by remember { mutableStateOf(false) }
@@ -326,6 +330,40 @@ private fun V10Root(controllerProvider: () -> MediaController?) {
                                 scope.launch { scanDevice() }
                             else requestAudio.launch(audioPermission)
                         }
+                    )
+                    "Discover" -> DiscoverPage(
+                        query = onlineQuery, results = onlineResults, loading = onlineLoading,
+                        message = onlineMessage, accent = accent, onQuery = { onlineQuery = it },
+                        onSearch = {
+                            val q = onlineQuery.trim()
+                            if (q.isNotEmpty()) scope.launch {
+                                onlineLoading = true; onlineMessage = "Searching YouTube Music…"
+                                try {
+                                    val found = withContext(Dispatchers.IO) { YoutubeiSearchRepository().search(q) }
+                                    onlineResults = found
+                                    onlineMessage = if (found.isEmpty()) "No tracks found. Try another search." else "${found.size} results"
+                                } catch (e: Exception) { onlineMessage = e.message ?: "Search failed. Please try again." }
+                                finally { onlineLoading = false }
+                            }
+                        },
+                        onPlay = { online -> scope.launch {
+                            onlineLoading = true; onlineMessage = "Resolving audio stream…"
+                            try {
+                                val stream = withContext(Dispatchers.IO) { YoutubeiStreamRepository().resolve(online.watchUrl) }
+                                val track = LocalTrack(stream.title, stream.artist, online.album.ifBlank { "YouTube Music" }, stream.streamUrl, 0L)
+                                if (tracks.none { it.uri == track.uri }) tracks.add(track)
+                                val controller = player
+                                if (controller == null) onlineMessage = "Player is starting. Try again in a moment."
+                                else {
+                                    val item = MediaItem.Builder().setUri(stream.streamUrl).setMediaMetadata(
+                                        MediaMetadata.Builder().setTitle(stream.title).setArtist(stream.artist).setAlbumTitle(track.album).build()
+                                    ).build()
+                                    controller.setMediaItem(item); controller.prepare(); controller.play()
+                                    activeUri = track.uri; playerOpen = true; onlineMessage = "Now playing from YouTube Music."
+                                }
+                            } catch (e: Exception) { onlineMessage = e.message ?: "This track could not be streamed." }
+                            finally { onlineLoading = false }
+                        } }
                     )
                     "Search" -> SearchPage(
                         query = search,
@@ -674,6 +712,66 @@ private fun LibraryPage(
 }
 
 @Composable
+private fun DiscoverPage(
+    query: String, results: List<OnlineTrack>, loading: Boolean, message: String, accent: Color,
+    onQuery: (String) -> Unit, onSearch: () -> Unit, onPlay: (OnlineTrack) -> Unit
+) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 20.dp)) {
+        PageHeader("Explore beyond your phone", "Discover", accent)
+        Text("YOUTUBE MUSIC", color = accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            OutlinedTextField(
+                value = query, onValueChange = onQuery, modifier = Modifier.weight(1f), singleLine = true,
+                placeholder = { Text("Songs, artists, albums…", color = Subtle) },
+                leadingIcon = { Icon(Icons.Filled.Search, null, tint = accent) },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Paper, unfocusedTextColor = Paper, focusedBorderColor = accent,
+                    unfocusedBorderColor = PanelRaised, cursorColor = accent,
+                    focusedContainerColor = Panel, unfocusedContainerColor = Panel
+                ), shape = RoundedCornerShape(18.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            FilledIconButton(onClick = onSearch, enabled = query.isNotBlank() && !loading,
+                colors = IconButtonDefaults.filledIconButtonColors(containerColor = accent, contentColor = Ink)) {
+                Icon(Icons.Filled.ArrowForward, "Search")
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (loading) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = accent)
+            Spacer(Modifier.width(8.dp)); Text(message, color = Subtle, fontSize = 12.sp)
+        }
+        Spacer(Modifier.height(8.dp))
+        LazyColumn(contentPadding = PaddingValues(bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(results, key = { it.videoId }) { track ->
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel)
+                    .clickable(enabled = !loading) { onPlay(track) }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CoverTile(accent, Modifier.size(52.dp), Icons.Filled.MusicNote)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(track.title, color = Paper, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(track.artist, color = Subtle, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        track.durationText?.let { Text(it, color = Subtle.copy(alpha = 0.75f), fontSize = 10.sp) }
+                    }
+                    IconButton(onClick = { onPlay(track) }, enabled = !loading) {
+                        Icon(Icons.Filled.PlayCircle, "Play", tint = accent, modifier = Modifier.size(30.dp))
+                    }
+                }
+            }
+        }
+        if (results.isEmpty() && !loading) {
+            Column(Modifier.fillMaxWidth().padding(top = 42.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Filled.TravelExplore, null, tint = Subtle, modifier = Modifier.size(44.dp))
+                Spacer(Modifier.height(10.dp))
+                Text("Find your next favourite", color = Paper, fontWeight = FontWeight.SemiBold)
+                Text("Search for a song, artist, or album.", color = Subtle, fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+@Composable
 private fun SearchPage(
     query: String,
     tracks: List<LocalTrack>,
@@ -938,6 +1036,7 @@ private fun BottomNavigation(screen: String, accent: Color, onNavigate: (String)
         val items = listOf(
             Triple("Home", Icons.Filled.Home, "Home"),
             Triple("Library", Icons.Filled.LibraryMusic, "Library"),
+            Triple("Discover", Icons.Filled.Public, "Discover"),
             Triple("Search", Icons.Filled.Search, "Search"),
             Triple("Settings", Icons.Filled.Settings, "Settings")
         )
