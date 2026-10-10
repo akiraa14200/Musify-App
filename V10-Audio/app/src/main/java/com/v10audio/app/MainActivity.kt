@@ -254,6 +254,21 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
                         Text("Your music starts here", color = fg, fontWeight = FontWeight.SemiBold)
                         Text("Scan your phone to find downloaded songs and audio files.", color = muted, fontSize = 12.sp)
                     }
+                } else if (selectedTab == "Artists") {
+                    LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 10.dp)) {
+                        itemsIndexed(shown.distinctBy { it.value.artist }, key = { _, it -> it.value.artist }) { _, entry ->
+                            val artistName = entry.value.artist
+                            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { query = artistName; selectedTab = "Songs" }.padding(vertical = 10.dp, horizontal = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(46.dp).clip(CircleShape).background(accent.copy(alpha = .16f)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Person, null, tint = accent) }
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(artistName, color = fg, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(tracks.count { it.artist == artistName }.toString() + " songs", color = muted, fontSize = 11.sp)
+                                }
+                                Icon(Icons.Default.ChevronRight, null, tint = muted)
+                            }
+                        }
+                    }
                 } else LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 10.dp)) {
                     itemsIndexed(shown, key = { _, it -> it.value.uri }) { _, entry ->
                         val i = entry.index; val t = entry.value
