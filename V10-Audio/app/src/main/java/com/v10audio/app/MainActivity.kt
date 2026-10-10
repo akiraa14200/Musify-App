@@ -509,8 +509,7 @@ private fun HomePage(
                 ) {
                     Text("YOUR LIBRARY", color = Paper.copy(alpha = 0.78f), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                     Spacer(Modifier.height(10.dp))
-                    Text("Music that moves
-with you.", color = Paper, fontSize = 27.sp, fontWeight = FontWeight.Bold, lineHeight = 31.sp)
+                    Text("Music that moves\\nwith you.", color = Paper, fontSize = 27.sp, fontWeight = FontWeight.Bold, lineHeight = 31.sp)
                     Spacer(Modifier.height(7.dp))
                     Text("Everything here plays from files on your phone.", color = Paper.copy(alpha = 0.78f), fontSize = 12.sp)
                     Spacer(Modifier.height(16.dp))
