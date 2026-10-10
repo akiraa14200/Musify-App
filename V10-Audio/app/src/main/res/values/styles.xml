@@ -1,0 +1,1 @@
+<resources><style name="Theme.V10Audio" parent="android:style/Theme.Material.Light.NoActionBar"><item name="android:fontFamily">sans</item><item name="android:colorAccent">#E63946</item><item name="android:statusBarColor">#100D0E</item><item name="android:navigationBarColor">#100D0E</item><item name="android:windowLightStatusBar">false</item></style></resources>
