@@ -25,4 +25,5 @@ dependencies {
     implementation("androidx.media3:media3-session:1.5.1")
     implementation("androidx.media3:media3-common:1.5.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("androidx.palette:palette-ktx:1.0.0")
 }
