@@ -101,6 +101,7 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
     var resolving by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
     var nowPlayingOpen by remember { mutableStateOf(false) }
+    var selectedTab by remember { mutableStateOf("Home") }
     var dynamicTheme by remember { mutableStateOf(prefs.getBoolean("dynamic_theme", true)) }
     var playerStyle by remember { mutableStateOf(prefs.getString("player_style", "Modern") ?: "Modern") }
     var backgroundStyle by remember { mutableStateOf(prefs.getString("background_style", "Glass") ?: "Glass") }
@@ -218,8 +219,21 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
                     IconButton(onClick = { settingsOpen = true }) { Icon(Icons.Default.Settings, "Settings", tint = fg) }
                 }
                 OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Search your library", color = muted) }, leadingIcon = { Icon(Icons.Default.Search, null, tint = muted) }, shape = RoundedCornerShape(16.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = red, unfocusedBorderColor = Color.White.copy(alpha = .12f), focusedTextColor = fg, unfocusedTextColor = fg, cursorColor = red))
-                Spacer(Modifier.height(22.dp))
-                Text("GOOD SOUND, NO NOISE.", color = accent, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 2.sp)
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("Home", "Songs", "Artists", "Favorites").forEach { tab ->
+                        FilterChip(selected = selectedTab == tab, onClick = { selectedTab = tab }, label = { Text(tab, fontSize = 11.sp) })
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                if (selectedTab == "Home") {
+                    Text("YOUR MUSIC, YOUR WAY", color = accent, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 2.sp)
+                    Text("Your library.\\nYour atmosphere.", color = fg, fontWeight = FontWeight.Bold, fontSize = 30.sp, lineHeight = 34.sp)
+                    Spacer(Modifier.height(12.dp))
+                } else {
+                    Text(when (selectedTab) { "Songs" -> "ALL SONGS"; "Artists" -> "YOUR ARTISTS"; else -> "LIKED MUSIC" }, color = accent, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 2.sp)
+                    Text(when (selectedTab) { "Songs" -> "All songs"; "Artists" -> "Artists"; else -> "Favorites" }, color = fg, fontWeight = FontWeight.Bold, fontSize = 28.sp)
+                }
                 Text("Made for the\nway you listen.", color = fg, fontWeight = FontWeight.Bold, fontSize = 34.sp, lineHeight = 38.sp)
                 Spacer(Modifier.height(16.dp))
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(if (playerStyle == "Minimal") Color.Transparent else Color.White.copy(alpha = if (backgroundStyle == "Glass") .07f else .04f)).clickable { if (active in tracks.indices) nowPlayingOpen = true }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -234,7 +248,7 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
                 Spacer(Modifier.height(18.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) { Text("YOUR LIBRARY", color = fg, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp); Spacer(Modifier.weight(1f)); Text("${tracks.size} tracks", color = muted, fontSize = 11.sp) }
                 Spacer(Modifier.height(6.dp))
-                val shown = tracks.withIndex().filter { it.value.title.contains(query, true) || it.value.artist.contains(query, true) }
+                val shown = tracks.withIndex().filter { (it.value.title.contains(query, true) || it.value.artist.contains(query, true)) && (selectedTab != "Favorites" || it.value.uri in favorites) }.let { list -> if (selectedTab == "Artists") list.sortedBy { it.value.artist.lowercase() } else list }
                 if (shown.isEmpty()) {
                     Column(Modifier.fillMaxWidth().padding(top = 20.dp).clip(RoundedCornerShape(18.dp)).background(Color.White.copy(alpha = .04f)).padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Your music starts here", color = fg, fontWeight = FontWeight.SemiBold)
