@@ -6,6 +6,8 @@ import android.os.Bundle
 import android.Manifest
 import android.content.pm.PackageManager
 import android.provider.MediaStore
+import android.media.MediaMetadataRetriever
+import android.graphics.BitmapFactory
 import android.os.Build
 import android.content.ContentUris
 import androidx.activity.ComponentActivity
@@ -27,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.palette.graphics.Palette
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -95,6 +98,25 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
     var dialog by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("Scan your device to import downloaded songs.") }
     var resolving by remember { mutableStateOf(false) }
+    var settingsOpen by remember { mutableStateOf(false) }
+    var dynamicTheme by remember { mutableStateOf(prefs.getBoolean("dynamic_theme", true)) }
+    var playerStyle by remember { mutableStateOf(prefs.getString("player_style", "Modern") ?: "Modern") }
+    var backgroundStyle by remember { mutableStateOf(prefs.getString("background_style", "Glass") ?: "Glass") }
+    var accentChoice by remember { mutableStateOf(prefs.getString("accent_choice", "Red") ?: "Red") }
+    var coverAccent by remember { mutableStateOf(Color(0xFFE63946)) }
+    val chosenAccent = when (accentChoice) {
+        "Violet" -> Color(0xFF9B87F5)
+        "Ocean" -> Color(0xFF48BFE3)
+        "Emerald" -> Color(0xFF52B788)
+        "Amber" -> Color(0xFFFFB454)
+        else -> Color(0xFFE63946)
+    }
+    val accent = if (dynamicTheme) coverAccent else chosenAccent
+    val screenBackground = when (backgroundStyle) {
+        "Colour" -> Color(0xFF171923)
+        "Normal" -> Color(0xFF100D0E)
+        else -> Color(0xFF100D0E)
+    }
     val scope = rememberCoroutineScope()
     val youtubei = remember { YoutubeiStreamRepository() }
 
@@ -147,6 +169,23 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
         onDispose { player?.removeListener(listener) }
     }
     LaunchedEffect(player) { while (true) { player?.let { pos = it.currentPosition.coerceAtLeast(0); dur = it.duration.takeIf { d -> d > 0 } ?: 0; playing = it.isPlaying }; delay(400) } }
+    LaunchedEffect(active, dynamicTheme) {
+        if (dynamicTheme && active in tracks.indices) {
+            val source = tracks[active].uri
+            val sampled = withContext(Dispatchers.IO) {
+                runCatching {
+                    val retriever = MediaMetadataRetriever()
+                    try {
+                        retriever.setDataSource(context, Uri.parse(source))
+                        val bytes = retriever.embeddedPicture ?: return@runCatching null
+                        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@runCatching null
+                        Palette.from(bitmap).generate().getVibrantColor(Palette.from(bitmap).generate().getDominantColor(0xFFE63946.toInt()))
+                    } finally { retriever.release() }
+                }.getOrNull()
+            }
+            if (sampled != null) coverAccent = Color(sampled)
+        }
+    }
 
     fun playIndex(index: Int) {
         val p = player ?: run { message = "Player is starting; try again shortly."; return }
@@ -162,27 +201,27 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
         if (uri != null) { runCatching { context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }; addTrack(Track(uri.lastPathSegment?.substringAfterLast(':') ?: "Local audio", "On this device", uri.toString())) }
     }
 
-    MaterialTheme(colorScheme = darkColorScheme(primary = red, background = bg, surface = Color(0xFF211A1C), onBackground = fg, onSurface = fg)) {
-        Scaffold(containerColor = bg, bottomBar = {
+    MaterialTheme(colorScheme = darkColorScheme(primary = accent, background = screenBackground, surface = Color(0xFF211A1C), onBackground = fg, onSurface = fg)) {
+        Scaffold(containerColor = screenBackground, bottomBar = {
             Row(Modifier.fillMaxWidth().background(Color(0xEE211A1C)).padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { dialog = true }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = fg)) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(4.dp)); Text("Stream URL") }
                 OutlinedButton(onClick = { if (ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED) scope.launch { message = "Scanning device music…"; scanDeviceSongs() } else scanPermission.launch(audioPermission) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = fg)) { Icon(Icons.Default.GraphicEq, null); Spacer(Modifier.width(4.dp)); Text("Scan all songs") }
             }
         }) { pad ->
-            Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF35161C), bg, bg))).padding(pad).padding(horizontal = 18.dp)) {
+            Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(if (backgroundStyle == "Glass") accent.copy(alpha = .20f) else screenBackground, screenBackground, screenBackground))).padding(pad).padding(horizontal = 18.dp)) {
                 Row(Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 18.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(46.dp).clip(RoundedCornerShape(15.dp)).background(Brush.linearGradient(listOf(red, Color(0xFF6D1825)))), contentAlignment = Alignment.Center) { Text("V10", color = Color.White, fontWeight = FontWeight.Black) }
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) { Text("V10 AUDIO", color = fg, fontWeight = FontWeight.Black, letterSpacing = 2.sp, fontSize = 19.sp); Text("YOUR SOUND. YOUR SPACE.", color = muted, fontSize = 9.sp, letterSpacing = 1.4.sp) }
-                    Icon(Icons.Default.GraphicEq, null, tint = red)
+                    IconButton(onClick = { settingsOpen = true }) { Icon(Icons.Default.Settings, "Settings", tint = fg) }
                 }
                 OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Search your library", color = muted) }, leadingIcon = { Icon(Icons.Default.Search, null, tint = muted) }, shape = RoundedCornerShape(16.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = red, unfocusedBorderColor = Color.White.copy(alpha = .12f), focusedTextColor = fg, unfocusedTextColor = fg, cursorColor = red))
                 Spacer(Modifier.height(22.dp))
-                Text("GOOD SOUND, NO NOISE.", color = red, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 2.sp)
+                Text("GOOD SOUND, NO NOISE.", color = accent, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 2.sp)
                 Text("Made for the\nway you listen.", color = fg, fontWeight = FontWeight.Bold, fontSize = 34.sp, lineHeight = 38.sp)
                 Spacer(Modifier.height(16.dp))
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Color.White.copy(alpha = .06f)).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Waves, null, tint = red, modifier = Modifier.size(38.dp))
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(if (playerStyle == "Minimal") Color.Transparent else Color.White.copy(alpha = if (backgroundStyle == "Glass") .07f else .04f)).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Waves, null, tint = accent, modifier = Modifier.size(38.dp))
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(tracks.getOrNull(active)?.title ?: "Build your sound", color = fg, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -203,10 +242,10 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
                     itemsIndexed(shown, key = { _, it -> it.value.uri }) { _, entry ->
                         val i = entry.index; val t = entry.value
                         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { playIndex(i) }.padding(vertical = 7.dp, horizontal = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF321D21)), contentAlignment = Alignment.Center) { if (active == i && playing) Icon(Icons.Default.GraphicEq, null, tint = red) else Text("${i + 1}".padStart(2, '0'), color = muted, fontSize = 12.sp) }
+                            Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(accent.copy(alpha = .16f)), contentAlignment = Alignment.Center) { if (active == i && playing) Icon(Icons.Default.GraphicEq, null, tint = accent) else Text("${i + 1}".padStart(2, '0'), color = muted, fontSize = 12.sp) }
                             Spacer(Modifier.width(11.dp))
                             Column(Modifier.weight(1f)) { Text(t.title, color = fg, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp); Text(t.artist, color = muted, fontSize = 11.sp, maxLines = 1) }
-                            IconButton(onClick = { if (t.uri in favorites) favorites.remove(t.uri) else favorites.add(t.uri); save() }) { Icon(if (t.uri in favorites) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, tint = if (t.uri in favorites) red else muted) }
+                            IconButton(onClick = { if (t.uri in favorites) favorites.remove(t.uri) else favorites.add(t.uri); save() }) { Icon(if (t.uri in favorites) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, tint = if (t.uri in favorites) accent else muted) }
                             IconButton(onClick = { tracks.remove(t); favorites.remove(t.uri); save(); if (active >= tracks.size) active = tracks.lastIndex }) { Icon(Icons.Default.Close, null, tint = muted) }
                         }
                     }
@@ -217,17 +256,83 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color(0xFF261D1F)).padding(horizontal = 12.dp, vertical = 6.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = { player?.seekToPreviousMediaItem() }) { Icon(Icons.Default.SkipPrevious, null, tint = fg) }
-                            IconButton(onClick = { if (playing) player?.pause() else player?.play() }, modifier = Modifier.clip(CircleShape).background(red)) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = Color.White) }
+                            IconButton(onClick = { if (playing) player?.pause() else player?.play() }, modifier = Modifier.clip(CircleShape).background(accent)) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = Color.White) }
                             IconButton(onClick = { player?.seekToNextMediaItem() }) { Icon(Icons.Default.SkipNext, null, tint = fg) }
                             Spacer(Modifier.weight(1f)); Text("${pos / 60000}:${((pos / 1000) % 60).toString().padStart(2, '0')} / ${dur / 60000}:${((dur / 1000) % 60).toString().padStart(2, '0')}", color = muted, fontSize = 10.sp)
                         }
-                        Slider(value = if (dur > 0) pos.toFloat().coerceIn(0f, dur.toFloat()) else 0f, onValueChange = { pos = it.toLong() }, onValueChangeFinished = { player?.seekTo(pos) }, valueRange = 0f..dur.coerceAtLeast(1).toFloat(), colors = SliderDefaults.colors(thumbColor = red, activeTrackColor = red))
+                        Slider(value = if (dur > 0) pos.toFloat().coerceIn(0f, dur.toFloat()) else 0f, onValueChange = { pos = it.toLong() }, onValueChangeFinished = { player?.seekTo(pos) }, valueRange = 0f..dur.coerceAtLeast(1).toFloat(), colors = SliderDefaults.colors(thumbColor = accent, activeTrackColor = accent))
                     }
                     Spacer(Modifier.height(8.dp))
                 }
             }
         }
     }
+    if (settingsOpen) AlertDialog(
+        onDismissRequest = { settingsOpen = false },
+        title = { Text("Appearance & player", color = fg) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("THEME", color = accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Dynamic cover colours", color = fg, fontWeight = FontWeight.SemiBold)
+                        Text("Tint the interface from embedded album artwork when available.", color = muted, fontSize = 11.sp)
+                    }
+                    Switch(checked = dynamicTheme, onCheckedChange = {
+                        dynamicTheme = it
+                        prefs.edit().putBoolean("dynamic_theme", it).apply()
+                    })
+                }
+                Text("ACCENT COLOUR", color = accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    listOf("Red" to Color(0xFFE63946), "Violet" to Color(0xFF9B87F5), "Ocean" to Color(0xFF48BFE3), "Emerald" to Color(0xFF52B788), "Amber" to Color(0xFFFFB454)).forEach { (name, color) ->
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f).clickable {
+                            accentChoice = name
+                            prefs.edit().putString("accent_choice", name).apply()
+                            if (!dynamicTheme) coverAccent = color
+                        }) {
+                            Box(Modifier.size(30.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) {
+                                if (accentChoice == name && !dynamicTheme) Icon(Icons.Default.Check, null, tint = Color.Black, modifier = Modifier.size(17.dp))
+                            }
+                            Text(name, color = muted, fontSize = 9.sp)
+                        }
+                    }
+                }
+                Text("PLAYER STYLE", color = accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("Minimal", "Modern").forEach { style ->
+                        FilterChip(selected = playerStyle == style, onClick = {
+                            playerStyle = style
+                            prefs.edit().putString("player_style", style).apply()
+                        }, label = { Text(style) })
+                    }
+                }
+                Text("BACKGROUND", color = accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                Column {
+                    listOf("Glass", "Normal", "Colour").forEach { style ->
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable {
+                            backgroundStyle = style
+                            prefs.edit().putString("background_style", style).apply()
+                        }.padding(vertical = 7.dp, horizontal = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = backgroundStyle == style, onClick = {
+                                backgroundStyle = style
+                                prefs.edit().putString("background_style", style).apply()
+                            })
+                            Column {
+                                Text(when (style) { "Glass" -> "Glass tint"; "Normal" -> "Plain dark"; else -> "Midnight colour" }, color = fg)
+                                Text(when (style) { "Glass" -> "Translucent panels with a cover-colour glow"; "Normal" -> "Flat, distraction-free background"; else -> "A subtle blue-black backdrop" }, color = muted, fontSize = 10.sp)
+                            }
+                        }
+                    }
+                }
+                Text("These preferences are saved on this device. Dynamic colour needs embedded artwork; streams without artwork keep the last/default tint.", color = muted, fontSize = 10.sp)
+            }
+        },
+        confirmButton = { TextButton(onClick = { settingsOpen = false }) { Text("Done", color = accent) } },
+        containerColor = Color(0xFF211A1C),
+        titleContentColor = fg,
+        textContentColor = fg
+    )
     if (dialog) AlertDialog(onDismissRequest = { dialog = false }, title = { Text("Add stream") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(title, { title = it }, label = { Text("Track / station name") }, singleLine = true)
