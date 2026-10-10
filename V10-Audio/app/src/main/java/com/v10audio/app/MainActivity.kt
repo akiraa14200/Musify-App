@@ -98,6 +98,12 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
     val scope = rememberCoroutineScope()
     val youtubei = remember { YoutubeiStreamRepository() }
 
+    fun save() {
+        val a = JSONArray()
+        tracks.forEach { a.put(JSONObject().put("title", it.title).put("artist", it.artist).put("uri", it.uri)) }
+        prefs.edit().putString("tracks", a.toString()).putStringSet("favorites", favorites.toSet()).apply()
+    }
+
     suspend fun scanDeviceSongs() {
         val imported = withContext(Dispatchers.IO) {
             val found = mutableListOf<Track>()
@@ -142,11 +148,6 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
     }
     LaunchedEffect(player) { while (true) { player?.let { pos = it.currentPosition.coerceAtLeast(0); dur = it.duration.takeIf { d -> d > 0 } ?: 0; playing = it.isPlaying }; delay(400) } }
 
-    fun save() {
-        val a = JSONArray()
-        tracks.forEach { a.put(JSONObject().put("title", it.title).put("artist", it.artist).put("uri", it.uri)) }
-        prefs.edit().putString("tracks", a.toString()).putStringSet("favorites", favorites.toSet()).apply()
-    }
     fun playIndex(index: Int) {
         val p = player ?: run { message = "Player is starting; try again shortly."; return }
         val items = tracks.map { t -> MediaItem.Builder().setUri(t.uri).setMediaMetadata(MediaMetadata.Builder().setTitle(t.title).setArtist(t.artist).build()).build() }
