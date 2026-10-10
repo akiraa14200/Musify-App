@@ -94,7 +94,9 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
     var streamUrl by remember { mutableStateOf("") }
     var dialog by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("Scan your device to import downloaded songs.") }
+    var resolving by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val youtubei = remember { YoutubeiStreamRepository() }
 
     suspend fun scanDeviceSongs() {
         val imported = withContext(Dispatchers.IO) {
@@ -234,11 +236,29 @@ private fun V10Screen(controllerProvider: () -> MediaController?) {
         }
     }, confirmButton = {
         TextButton(onClick = {
-            val u = runCatching { Uri.parse(streamUrl.trim()) }.getOrNull()
-            if (u?.scheme == "https" && !u.host.isNullOrBlank()) {
+            val raw = streamUrl.trim()
+            val u = runCatching { Uri.parse(raw) }.getOrNull()
+            val host = u?.host?.lowercase().orEmpty()
+            val isYoutube = host == "youtu.be" || host.endsWith(".youtu.be") || host == "youtube.com" || host.endsWith(".youtube.com")
+            if (isYoutube) {
+                if (resolving) return@TextButton
+                resolving = true
+                message = "Resolving YouTube audio…"
+                scope.launch {
+                    try {
+                        val resolved = withContext(Dispatchers.IO) { youtubei.resolve(raw) }
+                        addTrack(Track(title.ifBlank { resolved.title }, artist.ifBlank { resolved.artist }, resolved.streamUrl))
+                        message = "Resolved YouTube audio. Stream links can expire, so resolve again if playback later fails."
+                        dialog = false
+                        title = ""; artist = ""; streamUrl = ""
+                    } catch (e: Exception) {
+                        message = e.message ?: "Could not resolve this YouTube stream."
+                    } finally { resolving = false }
+                }
+            } else if (u?.scheme == "https" && !u.host.isNullOrBlank()) {
                 addTrack(Track(title.ifBlank { u.lastPathSegment ?: "Untitled stream" }, artist.ifBlank { "Online stream" }, u.toString()))
                 dialog = false; title = ""; artist = ""; streamUrl = ""
-            } else message = "Enter a valid HTTPS direct audio URL."
-        }) { Text("Add and play", color = red) }
+            } else message = "Enter a valid HTTPS audio URL or YouTube video link."
+        }) { Text(if (resolving) "Resolving…" else "Add and play", color = red) }
     }, dismissButton = { TextButton(onClick = { dialog = false }) { Text("Cancel", color = muted) } }, containerColor = Color(0xFF211A1C), titleContentColor = fg, textContentColor = muted)
 }
