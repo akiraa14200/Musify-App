@@ -1139,7 +1139,7 @@ class MainActivity : ComponentActivity() {
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                                         // app icon
                                                         Image(
-                                                            painter = painterResource(id = R.drawable.ic_velune_concept),
+                                                            painter = painterResource(id = R.drawable.musify_logo),
                                                             contentDescription = "Musify Logo",
                                                             modifier = Modifier
                                                                 .size(35.dp)
