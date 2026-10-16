@@ -507,7 +507,7 @@ private fun HomePage(
     Column(Modifier.fillMaxSize()) {
         PageHeader(
             "Your offline music",
-            "V10 Audio",
+            "8 Audio",
             accent,
             action = {
                 IconButton(onClick = onOpenSettings) {
@@ -900,7 +900,7 @@ private fun SettingsPage(
                         CoverTile(accent, Modifier.size(48.dp), Icons.Filled.MusicNote)
                         Spacer(Modifier.width(12.dp))
                         Column {
-                            Text("V10 Audio", color = Paper, fontWeight = FontWeight.Bold)
+                            Text("8 Audio", color = Paper, fontWeight = FontWeight.Bold)
                             Text("Offline music player · Version 1.0.0", color = Subtle, fontSize = 12.sp)
                         }
                     }
@@ -1127,7 +1127,7 @@ private fun FullPlayer(
             IconButton(onClick = onNext, modifier = Modifier.size(52.dp)) { Icon(Icons.Filled.SkipNext, "Next", tint = Paper, modifier = Modifier.size(31.dp)) }
         }
         Spacer(Modifier.weight(0.7f))
-        Text("LOCAL AUDIO  •  V10 AUDIO", color = Subtle.copy(alpha = 0.7f), fontSize = 9.sp, letterSpacing = 1.5.sp, modifier = Modifier.padding(bottom = 16.dp))
+        Text("LOCAL AUDIO  •  8 AUDIO", color = Subtle.copy(alpha = 0.7f), fontSize = 9.sp, letterSpacing = 1.5.sp, modifier = Modifier.padding(bottom = 16.dp))
     }
 }
 
