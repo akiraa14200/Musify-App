@@ -1,4 +1,4 @@
-name: Build 8 Audio APK
+name: Build V10 Audio APK
 
 on:
   workflow_dispatch:
@@ -39,7 +39,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: 8-Audio-debug-apk
+          name: V10-Audio-debug-apk
           path: V10-Audio/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
