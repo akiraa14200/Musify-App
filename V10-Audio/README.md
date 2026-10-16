@@ -1,4 +1,4 @@
-# V10 Audio
+# 8 Audio
 
 Native Android audio streaming player with a minimal red/black glass-inspired interface. Built with Kotlin, Jetpack Compose and AndroidX Media3 ExoPlayer.
 
@@ -12,4 +12,4 @@ Native Android audio streaming player with a minimal red/black glass-inspired in
 This is a streaming player, not a licensed music catalogue. It does not scrape video platforms or bypass DRM. To ship a searchable catalogue, connect a backend that has distribution rights to the audio.
 
 ## Build
-Open the `V10-Audio` directory in Android Studio, use JDK 17 and Android SDK 35, sync Gradle, then build the debug variant. Requires an internet connection for Gradle dependencies.
+Open the `8-Audio` directory in Android Studio, use JDK 17 and Android SDK 35, sync Gradle, then build the debug variant. Requires an internet connection for Gradle dependencies.
