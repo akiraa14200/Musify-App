@@ -1,112 +1,82 @@
-# Transcript Studio
+# Transcript Studio — Android Local Edition
 
-A free-first AI audio/video transcription workspace built on Cloudflare Workers, D1, R2 and Queues. It does not use Vercel or Supabase.
+A private, single-user transcription workspace designed to run locally on Android through Termux. The React interface runs in your phone browser; a Python API and SQLite database run on the same device.
 
-## Current implementation
+**No Vercel, Supabase, Cloudflare, public deployment, account registration, or cloud database.**
 
-- Vite + React + TypeScript responsive dashboard.
-- Email/password registration and login with server-side PBKDF2 password hashing and HttpOnly session cookies.
-- D1-backed user, session, project, transcript, segment and job records.
-- R2 media storage with user-scoped object keys.
-- Queue-backed asynchronous Groq Whisper transcription.
-- Whisper Large V3 and Large V3 Turbo selection.
-- Automatic language detection and explicit language choices.
-- Timestamped segment persistence when returned by the provider.
-- Editable transcript with debounced autosave.
-- Project list, status refresh, delete project/media, TXT and SRT exports.
-- API ownership checks on every project operation.
-- No mock transcript data or simulated completion.
+## Features in this local build
 
-## Important current limitations
+- React + Vite responsive dark-glass interface.
+- Local FastAPI backend bound to `127.0.0.1`.
+- SQLite project/transcript/version database and local media files.
+- Audio/video file upload and browser microphone recording.
+- Groq Whisper Large V3 / Turbo transcription when a Groq key is configured.
+- FFmpeg probing and splitting long files into 9-minute chunks.
+- Persisted projects and transcript edits; failed jobs can be retried.
+- Transcript editor, timestamped segments, version snapshots, TXT/SRT/VTT/JSON/CSV export.
+- Optional Gemini text actions: cleanup, summary, chapters, keywords, and analysis.
+- YouTube caption-only import attempt. It does not download media or bypass platform restrictions.
+- Local storage status and delete-all-data control.
 
-- Direct upload is limited to 20 MB. The app does not yet implement browser-to-R2 multipart uploads or long-media chunking.
-- The worker forwards one audio/video file to Groq. Provider size, format, duration, quota and timeout limits still apply.
-- YouTube URL ingestion and caption retrieval are not enabled. No platform restrictions are bypassed.
-- Speaker diarization, microphone recording, AI summary/translation/chapters/keywords, undo/redo, version history, PDF/DOCX/JSON/CSV/VTT exports and full subtitle editor are not implemented yet.
-- Email accounts are not email-verified in this initial version. Use a unique password; add an email delivery provider before public launch.
-- Queue processing and API calls require configured Cloudflare resources and secrets. The repository cannot prove production operation until deployed and tested with your credentials.
+## Install on Android
 
-## Stack
+1. Install Termux from a trusted source such as F-Droid or the official Termux GitHub releases. Do not mix Termux and add-on APKs from different sources.
+2. Open Termux and run:
 
-- Frontend: Vite, React, TypeScript, Lucide.
-- Hosting/API: Cloudflare Workers with static assets.
-- Database: Cloudflare D1 (SQLite).
-- Media storage: Cloudflare R2.
-- Background processing: Cloudflare Queues.
-- Transcription: Groq Whisper API.
-
-## Cloudflare setup
-
-Install Node.js 20+ and dependencies:
-
-```bash
+```sh
+pkg update -y && pkg upgrade -y
+pkg install -y git python nodejs ffmpeg
+git clone https://github.com/akiraa14200/Musify-App.git
+cd Musify-App
+git checkout android-local-studio
+pip install -r requirements.txt
 npm install
+cp .env.example .env
+nano .env
 ```
 
-Authenticate Wrangler:
+3. Add your own keys to `.env` only if you want external AI providers:
 
-```bash
-npx wrangler login
+```env
+GROQ_API_KEY=your_groq_key
+GEMINI_API_KEY=your_gemini_key
 ```
 
-Create resources:
+4. Build and start the app. Use two Termux sessions:
 
-```bash
-npx wrangler d1 create transcript-studio-db
-npx wrangler r2 bucket create transcript-studio-media
-npx wrangler queues create transcript-studio-jobs
+**Session 1 — API**
+
+```sh
+cd ~/Musify-App
+uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
-Copy the D1 database ID printed by Wrangler into `wrangler.jsonc` in place of `REPLACE_WITH_D1_DATABASE_ID`.
+**Session 2 — web interface**
 
-Apply the database migration:
-
-```bash
-npx wrangler d1 migrations apply transcript-studio-db --remote
-```
-
-Set secrets (values are never stored in Git):
-
-```bash
-npx wrangler secret put GROQ_API_KEY
-```
-
-Optional Gemini key for future text tools:
-
-```bash
-npx wrangler secret put GEMINI_API_KEY
-```
-
-Run locally:
-
-```bash
+```sh
+cd ~/Musify-App
 npm run dev
 ```
 
-Build and deploy directly to Cloudflare Workers:
+5. Open **http://127.0.0.1:5173** in Chrome on the same phone.
 
-```bash
-npm run deploy
+## Privacy and provider behavior
+
+- Projects, transcripts, versions, and uploaded media are stored in the repository's ignored `data/` directory on your phone.
+- Groq transcription sends the selected audio to Groq. Do not add a key if you do not want this.
+- Gemini text tools send the transcript text to Google only when you explicitly click a tool.
+- API keys stay in the local `.env` file and are never compiled into the frontend.
+- YouTube import tries to retrieve accessible captions only. It does not download video/audio. Some videos have no accessible captions.
+- The local API listens on loopback only; it is not available to other devices on your Wi-Fi.
+
+## Current limitations — please read
+
+This is the first Android-local conversion, not a claim that every item from the original wishlist is complete. PDF/DOCX export, full SRT/VTT subtitle editing, robust overlapping chunk boundary reconciliation, diarization, translation UI, chapter editing, advanced undo/redo, and complete offline ASR are not yet included. The current chunker splits at 9-minute boundaries and adjusts timestamps, but does not yet reconcile duplicated words across boundaries. YouTube captions depend on caption availability and upstream library compatibility. Gemini model access depends on the API key/account. Android may suspend Termux background work; keep Termux active during long transcriptions and retry a failed job if needed.
+
+## Build checks
+
+```sh
+npm run typecheck
+npm run build
+python -m compileall backend
 ```
-
-This deploy path uses Wrangler and Cloudflare Workers, not Vercel. Cloudflare account usage and service quotas apply.
-
-## Local API development
-
-For local Worker testing, use `npx wrangler dev`. Create a local `.dev.vars` file (gitignored) containing:
-
-```text
-GROQ_API_KEY=your_key
-```
-
-Configure D1 and R2 local bindings through Wrangler. Never commit `.dev.vars` or API keys.
-
-## Security notes
-
-- Passwords are derived with PBKDF2-SHA-256 and per-user random salts.
-- Session identifiers are random and stored as SHA-256 hashes in D1.
-- Session cookies are HttpOnly, Secure and SameSite=Lax.
-- Project queries always include the authenticated user ID.
-- R2 media keys include the owning user ID and are only read/deleted from authenticated server routes or queue messages.
-- Provider secrets are Worker secrets, not browser environment variables.
-- Add email verification, CSRF hardening, rate limiting, account recovery and abuse controls before opening registration publicly.
