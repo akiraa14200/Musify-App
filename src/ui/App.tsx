@@ -9,9 +9,9 @@ const fmtDate=(s:string)=>new Date(s+"Z").toLocaleDateString(undefined,{month:"s
 const fmtTime=(n:number)=>{const m=Math.floor(n/60),s=Math.floor(n%60);return String(m).padStart(2,"0")+":"+String(s).padStart(2,"0")};
 const sizeLabel=(n:number)=>n<1024*1024?(n/1024).toFixed(0)+" KB":(n/1024/1024).toFixed(1)+" MB";
 
-async function api(path:string,init:RequestInit={}) {
+async function api<T=any>(path:string,init:RequestInit={}):Promise<T> {
   const response=await fetch(path,{...init,credentials:"same-origin"});
-  const data=await response.json().catch(()=>({}));
+  const data=await response.json().catch(()=>({})) as T & {error?:string};
   if(!response.ok) throw new Error(data.error||"Request failed.");
   return data;
 }
