@@ -27,7 +27,7 @@ The UI labels unfinished features and does not show fake project history or simu
 4. Run npm install, then npm run dev.
 5. Open http://localhost:3000.
 
-The first API route accepts files up to 24 MB and does not yet split long media. Provider quotas and model availability can change.
+The direct API route is intentionally limited to 4 MB to fit typical Vercel serverless request limits. Larger media requires direct-to-storage uploads and a background worker, which are not implemented yet. Provider quotas and model availability can change.
 
 ## Environment variables
 
