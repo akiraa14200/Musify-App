@@ -1,11 +1,10 @@
 node_modules
-.next
-out
 dist
+.wrangler
+.dev.vars
 .env
 .env.*
 !.env.example
-.vercel
 coverage
 *.log
 .DS_Store
