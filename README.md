@@ -1,304 +1,51 @@
+# Transcript Studio
 
-<div align="center">
-
- <img src="" width="110" />
-
-</div>
-
-# 🌌 Musify
-<div align="center">
-
-<pre>
-██╗   ██╗███████╗██╗     ██╗   ██╗███╗   ██╗███████╗
-██║   ██║██╔════╝██║     ██║   ██║████╗  ██║██╔════╝
-██║   ██║█████╗  ██║     ██║   ██║██╔██╗ ██║█████╗
-╚██╗ ██╔╝██╔══╝  ██║     ██║   ██║██║╚██╗██║██╔══╝
- ╚████╔╝ ███████╗███████╗╚██████╔╝██║ ╚████║███████╗
-  ╚═══╝  ╚══════╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝
-</pre>
-
-</div>
-
-### 🎧 The YouTube Music app you always wanted
-
-🚫 No Ads • 💰 No Subscription • ⚡ Full Control  
-
-<div align="center">
-
-![Release](https://img.shields.io/github/v/release/nikhilvishwakarma00/Musify?style=for-the-badge&logo=github&logoColor=white&labelColor=18181B&color=3B82F6)
-![Downloads](https://img.shields.io/github/downloads/nikhilvishwakarma00/Musify/total?style=for-the-badge&logo=github&logoColor=white&labelColor=18181B&color=10B981)
-![Stars](https://img.shields.io/github/stars/nikhilvishwakarma00/Musify?style=for-the-badge&logo=github&logoColor=white&labelColor=18181B&color=F59E0B)
-![License](https://img.shields.io/github/license/nikhilvishwakarma00/Musify?style=for-the-badge&labelColor=18181B&color=EF4444)
-
-<br>
-
-![Kotlin](https://img.shields.io/badge/Kotlin-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)
-![Jetpack Compose](https://img.shields.io/badge/Compose-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white)
-![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)
-![Architecture](https://img.shields.io/badge/Architecture-MVVM-52525B?style=for-the-badge)
+Free-first AI audio/video transcription workspace using Next.js, TypeScript, Groq Whisper and a Supabase schema foundation.
 
-</div>
+## Implemented in this first replacement commit
 
-## 📱 Musify
+- Next.js App Router and TypeScript foundation.
+- Responsive dark workspace interface.
+- Real server-side Groq Whisper transcription endpoint.
+- Large V3 and Large V3 Turbo model selection.
+- Language selection and verbose timestamp response.
+- Editable transcript text area and TXT export.
+- Supabase schema draft with owner-scoped RLS policies.
+- Environment variable template and secret-safe gitignore.
 
-**Musify** is a modern Android music player built from the supplied Velune source, rebranded with the new Musify identity and your supplied logo.
+## Not yet implemented
 
-### Included features
-- YouTube Music search and music discovery
-- Background audio playback
-- Local music library and downloads
-- Playlists, queue, history and favorites
-- Lyrics and synchronized lyrics support
-- Albums, artists, charts and new releases
-- Equalizer, crossfade, tempo and pitch controls
-- Sleep timer and playback controls
-- Discord Rich Presence integration
-- Music Together / synchronized listening
-- Android home-screen media controls and widgets
-- Multiple languages
+Supabase Auth and persistence, media storage, background worker, resumable chunked uploads, chunk overlap reconciliation, YouTube authorized captions, microphone recording, diarization, editor undo/redo and autosave, Gemini text tools, subtitle formats, PDF/DOCX/JSON/CSV exports, automated integration tests.
 
-### App identity
-- **App name:** Musify
-- **Application ID:** `com.musify.music`
-- **Version:** 1.0.0
-- **Minimum Android:** Android 8.0 (API 26)
-- **Target Android:** API 36
-- **Primary architecture for most modern phones:** `arm64`
+The UI labels unfinished features and does not show fake project history or simulated AI output.
 
-### Build on GitHub Codespaces
-Use the included Gradle wrapper and build the universal release APK with:
+## Local setup
 
-```bash
-chmod +x gradlew
-./gradlew :app:assembleUniversalRelease
-```
+1. Use Node.js 20.9 or newer.
+2. Copy .env.example to .env.local.
+3. Set GROQ_API_KEY server-side.
+4. Run npm install, then npm run dev.
+5. Open http://localhost:3000.
 
-The APK is produced under `app/build/outputs/apk/universal/release/`.
+The first API route accepts files up to 24 MB and does not yet split long media. Provider quotas and model availability can change.
 
-## 📥 Download Now
+## Environment variables
 
+- GROQ_API_KEY: server-side Groq key.
+- GROQ_TRANSCRIPTION_MODEL: default Whisper model.
+- GEMINI_API_KEY and GEMINI_MODEL: reserved for upcoming text tools.
+- NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY: Supabase client configuration.
+- SUPABASE_SERVICE_ROLE_KEY: server-only elevated key; never expose it in browser code.
+- TRANSCRIPTION_WORKER_URL and TRANSCRIPTION_WORKER_SECRET: optional future worker integration.
 
-<div align="center">
+## Supabase
 
-<h2>Stable Release</h2>
+Run supabase/schema.sql in the Supabase SQL editor. Authentication and persistence code must be completed before relying on user project storage. Review RLS policies before production use.
 
-<table>
-  <thead>
-    <tr>
-      <th align="center">Obtainium</th>
-      <th align="center">IzzyOnDroid</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td align="center">
-        <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/nikhilvishwakarma00/Musify">
-          <img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" height="50" alt="Get Musify on Obtainium">
-        </a>
-      </td>
-      <td align="center">
-        <a href="https://apt.izzysoft.de/fdroid/index/apk/com.nikhil.yt">
-          <img src="assets/IzzyOnDroidButtonBorder.svg" height="50" alt="Get Musify on IzzyOnDroid">
-        </a>
-      </td>
-    </tr>
-    <tr>
-      <th align="center" colspan="2">GitHub</th>
-    </tr>
-    <tr>
-      <td align="center" colspan="2">
-        <a href="https://github.com/nikhilvishwakarma00/Musify/releases/latest">
-          <img src="assets/badge_github.png" height="50" alt="Get Musify on GitHub">
-        </a>
-      </td>
-    </tr>
-  </tbody>
-</table>
+## Vercel deployment
 
-</div>
+Import this repository into Vercel with the Next.js preset. Configure GROQ_API_KEY in project environment variables before testing transcription. No secrets belong in source control.
 
+## YouTube and privacy
 
-## 🚀 Why Musify?
-
-Musify is not just another music player — it's a **complete reimagination of YouTube Music**.
-
-* ⚡ **Faster** than the official app
-* 🎵 Built for audiophiles & power users
-* 📦 True offline-first experience
-* 🎨 Stunning **Material You** interface
-
-> 💡 This is YouTube Music — *but unlocked*
-
----
-
-## 🎯 Highlight Feature
-
-### 🎤 Real-Time Synced Lyrics
-
-Experience lyrics like never before:
-
-- Word-by-word sync  
-- Smooth animations  
-- Translation support  
-- Fully immersive playback  
-
----
-
-## 📸 Preview
-
-<div align="center">
-
-<img src="screenshots/Home.png" width="140"/>
-<img src="screenshots/Now Playing.png" width="140"/>
-<img src="screenshots/History.png" width="140"/>
-<img src="screenshots/Stats.png" width="140"/>
-
-<br/>
-
-<img src="screenshots/Library.png" width="140"/>
-<img src="screenshots/Settings.png" width="140"/>
-<img src="screenshots/About.png" width="140"/>
-
-</div>
-
-
-
----
-
-## ✨ Features
-
-### 🎵 Core Experience
-- Ad-Free Playback  
-- Full Library Sync  
-- Offline Caching (Encrypted)  
-- Background Playback  
-
-### 🔊 Audio Engine
-- Gapless Playback  
-- Crossfade Engine  
-- Silence Skipping  
-- Loudness Normalization (EBU R128)  
-- Tempo & Pitch Control  
-- System EQ Integration  
-
-### 🎨 UI & Discovery
-- Material You (Dynamic Colors)  
-- Synced Lyrics + Translation  
-- Discord Rich Presence  
-- Personalized Home Feed  
-- Year in Review Stats  
-- Custom Animated Loader  
-
----
-
-## 🧠 Architecture
-
-Built using **modern Android engineering principles**:
-
-- MVVM + Clean Architecture  
-- Unidirectional Data Flow (UDF)  
-- Modular & scalable codebase  
-
----
-
-## 🛠 Tech Stack
-
-| Layer | Stack |
-|------|------|
-| Language | Kotlin |
-| UI | Jetpack Compose + Material 3 |
-| Audio | Media3 / ExoPlayer |
-| DI | Hilt |
-| Database | Room (Encrypted) |
-| Networking | Ktor + Retrofit |
-| Async | Coroutines + Flow |
-| Build | Gradle KTS |
-
----
-
-## 📂 Project Structure
-
-```bash
-musify/
-├── app/
-├── innertube/
-├── lrclib/
-├── kizzy/
-├── canvas/
-├── lastfm/
-├── kugou/
-```
-
-Getting Started \
-Requirements\
-Android Studio Ladybug+\
-JDK 17
-Android SDK 34+ \
-Run Locally\
-Bash
-```
-git clone https://github.com/nikhilvishwakarma00/Musify.git\
-cd Musify\
-
-```
-Open in Android Studio → Sync → Run ▶ \
-📦 Download
- 
-
-🚀 Get Latest Release⁠ 
-
--------------------------------------------------------------------------
-
-## 💬 Community
-
-Have a feature request, found a bug,
-or just want to share your favorite music setups? Join the official Musify community!
-
-* *Discord:* [Join the Musify Server](https://discord.gg/cJNHTdpP6H)
-* *GitHub Discussions:* [Open a Discussion](https://github.com/nikhilvishwakarma00/Musify/discussions)
-
-
-
---------------------------------------------------------------------------------------------------------------
-
-
-🙌 Credits\
-Huge respect to these projects:
-
-Archivetune -base framework
-
-Metrolist
-
-InnerTune
-
-Kizzy
-
-SimpMusic
-
-BetterLyrics
-
-⚖️ Legal
-Musify is an independent client and is not affiliated with YouTube or Google.\
-Please support artists through official platforms ❤️\
-Licensed under GPL-3.0
- 
-
-💙 Built with passion by Nikhil\
-⭐ Star the repo if Musify impressed you\
-🚀 Help it reach more people
-
-## 🔗 Star History
-
-<div align="center">
-  <a href="https://star-history.com/nikhilvishwakarma00/musify&Date">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nikhilvishwakarma00/musify&type=Date&theme=dark" />
-      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nikhilvishwakarma00/musify&type=Date" />
-      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=nikhilvishwakarma00/musify&type=Date" />
-    </picture>
-  </a>
-
-  <br/>
-  <br/><br/>
-</div>
- 
+Direct YouTube audio extraction is not enabled. An authorized captions integration is still required. Do not bypass DRM or platform restrictions. Files sent through the transcription route are forwarded to Groq and are not persisted by this starter.
