@@ -7,7 +7,6 @@ interface Env {
   ASSETS: Fetcher;
   GROQ_API_KEY: string;
   GEMINI_API_KEY?: string;
-  SESSION_SECRET?: string;
 }
 interface TranscriptJob {
   projectId: string;
@@ -26,7 +25,7 @@ type Project = {
 };
 const MAX_UPLOAD = 20 * 1024 * 1024;
 const COOKIE = "ts_session";
-const allowedExt = /\.(mp3|wav|m4a|flac|ogg|mp4|mov|webm|mkv)$/i;
+const allowedExt = /\.(mp3|wav|m4a|flac|ogg|mp4|webm)$/i;
 
 function json(data: unknown, status = 200, headers: HeadersInit = {}) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers } });
@@ -120,7 +119,7 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
     const file = form.get("file");
     if (!(file instanceof File) || !file.size) return json({ error: "Choose an audio or video file." }, 400);
     if (file.size > MAX_UPLOAD) return json({ error: "This upload route currently accepts files up to 20 MB. Larger files need multipart R2 uploads and chunked worker processing." }, 413);
-    if (!allowedExt.test(file.name)) return json({ error: "Unsupported file type." }, 415);
+    if (!allowedExt.test(file.name)) return json({ error: "Unsupported file type. Use MP3, WAV, M4A, FLAC, OGG, MP4 or WEBM. MOV and MKV need conversion first." }, 415);
     if (!env.GROQ_API_KEY) return json({ error: "Groq is not configured. Add the GROQ_API_KEY Worker secret." }, 503);
     const id = crypto.randomUUID();
     const jobId = crypto.randomUUID();
@@ -176,6 +175,8 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
 }
 
 async function processTranscript(message: TranscriptJob, env: Env) {
+  const existing = await env.DB.prepare("SELECT status FROM projects WHERE id=? AND user_id=?").bind(message.projectId,message.userId).first<{status:string}>();
+  if (existing?.status === "completed") return;
   await env.DB.prepare("UPDATE projects SET status='processing',updated_at=datetime('now') WHERE id=? AND user_id=?").bind(message.projectId,message.userId).run();
   await env.DB.prepare("UPDATE processing_jobs SET status='processing',progress=15,current_step='Sending audio to Groq Whisper',updated_at=datetime('now') WHERE project_id=?").bind(message.projectId).run();
   const object = await env.MEDIA.get(message.mediaKey);
