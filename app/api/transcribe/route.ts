@@ -3,7 +3,9 @@ import { transcribeWithGroq } from "@/lib/providers/groq";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
-const MAX_FILE_BYTES = 24 * 1024 * 1024;
+// Vercel Functions have a small request-body ceiling; keep direct uploads below it.
+// Large files will use direct-to-storage uploads and a background worker in a later phase.
+const MAX_FILE_BYTES = 4 * 1024 * 1024;
 const ALLOWED = /\.(mp3|wav|m4a|flac|ogg|mp4|mov|webm|mkv)$/i;
 
 export async function POST(request: NextRequest) {
@@ -12,7 +14,7 @@ export async function POST(request: NextRequest) {
     const file = form.get("file");
     if (!(file instanceof File)) return NextResponse.json({ error: "Choose an audio or video file first." }, { status: 400 });
     if (!file.size) return NextResponse.json({ error: "The selected file is empty." }, { status: 400 });
-    if (file.size > MAX_FILE_BYTES) return NextResponse.json({ error: "This first version accepts files up to 24 MB. Long-file chunking is not enabled yet." }, { status: 413 });
+    if (file.size > MAX_FILE_BYTES) return NextResponse.json({ error: "This direct-upload starter is limited to 4 MB. Larger media needs the planned direct-to-storage and background-worker pipeline." }, { status: 413 });
     if (!ALLOWED.test(file.name)) return NextResponse.json({ error: "Unsupported file type." }, { status: 415 });
     const result = await transcribeWithGroq(file, {
       language: String(form.get("language") || "auto"),
