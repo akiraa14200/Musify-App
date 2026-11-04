@@ -525,9 +525,7 @@ class MainActivity : Activity() {
         filterRow.addView(filter, LinearLayout.LayoutParams(dp(76), dp(36)).apply { rightMargin = dp(8) })
         filterRow.addView(actionButton("SONGS", false) { }, LinearLayout.LayoutParams(dp(86), dp(36)))
         filterRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
-        filterRow.addView(actionButton("↻", false) {
-            if (query.text.isNotBlank()) searchJioSaavn(query.text.toString(), tracks, adapterRef, infoRef)
-        }, LinearLayout.LayoutParams(dp(42), dp(36)))
+        filterRow.addView(actionButton("↻", false) { }, LinearLayout.LayoutParams(dp(42), dp(36)))
         dialogRoot.addView(filterRow, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(10) })
 
         val info = text("Search JioSaavn for songs and artists", 11f, 0xFFB7B7B7.toInt()).apply {
@@ -550,7 +548,7 @@ class MainActivity : Activity() {
                 val row = LinearLayout(this@MainActivity).apply {
                     gravity = Gravity.CENTER_VERTICAL
                     setPadding(dp(4), dp(7), dp(5), dp(7))
-                    background = if (currentMusic?.id == track.id) shape(0x553FFFFFF, 13) else android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+                    background = if (currentMusic?.id == track.id) shape(0x553F3F3F.toInt(), 13) else android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
                 }
                 val art = ImageView(this@MainActivity).apply {
                     layoutParams = LinearLayout.LayoutParams(dp(62), dp(62))
