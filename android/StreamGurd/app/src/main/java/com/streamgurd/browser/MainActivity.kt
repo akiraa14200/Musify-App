@@ -58,7 +58,15 @@ class MainActivity : Activity() {
         "adsterra.com","yllix.com","trafficjunky.net","mgid.com","revcontent.com","zedo.com",
         "smartadserver.com","rubiconproject.com","openx.net","pubmatic.com","casalemedia.com",
         "lijit.com","sharethrough.com","bidvertiser.com","hilltopads.net","onclickads.net",
-        "pushengage.com","pushwoosh.com","adpushup.com","adskeeper.co.uk","ad-maven.com"
+        "pushengage.com","pushwoosh.com","adpushup.com","adskeeper.co.uk","ad-maven.com",
+        "juicyads.com","juicyads.com","adcash.com","adclick.g.doubleclick.net","popunder.net",
+        "popunderjs.com","onclickmega.com","onclickmega.com","understoodads.com","trafficstars.com",
+        "adf.ly","shorte.st","clk.sh","linkvertise.com","loot-link.com","lootlinks.co",
+        "adsco.re","a-ads.com","adfoc.us","cointraffic.io","hilltopads.com","monetag.com",
+        "monetag.com","galaksion.com","dtscout.com","tsyndicate.com","exosrv.com","exoclick.org",
+        "adnium.com","adnium.net","adspyglass.com","adskeeper.com","adsterra.org","propellerads.com",
+        "onclickads.net","popunder.com","popads.net","popcash.net","trafficjunky.com",
+        "ad-delivery.net","adnami.io","admanmedia.com","admedo.com","adnetwork.vn"
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -501,13 +509,16 @@ class MainActivity : Activity() {
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                 val uri = request?.url ?: return null
                 val h = uri.host?.lowercase(Locale.ROOT) ?: return null
-                val sameSite = isTrustedSiteHost(h)
-                val denied = blocking && !sameSite && blocked.any { h == it || h.endsWith(".$it") }
-                return if(denied) WebResourceResponse("text/plain","utf-8",204,"Blocked", emptyMap(),java.io.ByteArrayInputStream(ByteArray(0)))
+                val denied = blocking && isBlockedHost(h)
+                return if(denied) blockedResponse()
                     else super.shouldInterceptRequest(view,request)
             }
             override fun onPageStarted(view: WebView?, page: String?, favicon: android.graphics.Bitmap?) {
                 page?.let { url.setText(it); host = hostOf(it); status.text = "LOADING · $host" }
+                if (blocking) installPopupGuard()
+            }
+            override fun onPageCommitVisible(view: WebView?, page: String?) {
+                if (blocking) installPopupGuard()
             }
             override fun onPageFinished(view: WebView?, page: String?) {
                 page?.let { prefs.edit().putString("last_url",it).apply(); saveHistory(it) }
@@ -522,8 +533,7 @@ class MainActivity : Activity() {
                 // and other subframe resources remain available unless their host is blocked.
                 if (request.isForMainFrame) {
                     val destination = uri.host?.lowercase(Locale.ROOT) ?: return true
-                    val isKnownAdHost = blocked.any { destination == it || destination.endsWith(".$it") }
-                    if (isKnownAdHost || !isTrustedSiteHost(destination)) {
+                    if (isBlockedHost(destination) || !isTrustedSiteHost(destination)) {
                         status.text = "BLOCKED REDIRECT · $destination"
                         return true
                     }
@@ -537,8 +547,7 @@ class MainActivity : Activity() {
                 val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return true
                 if (scheme !in listOf("http", "https")) return true
                 val destination = uri.host?.lowercase(Locale.ROOT) ?: return true
-                val isKnownAdHost = blocked.any { destination == it || destination.endsWith(".$it") }
-                if (isKnownAdHost || !isTrustedSiteHost(destination)) {
+                if (isBlockedHost(destination) || !isTrustedSiteHost(destination)) {
                     status.text = "BLOCKED REDIRECT · $destination"
                     return true
                 }
@@ -556,6 +565,51 @@ class MainActivity : Activity() {
             }
             override fun onHideCustomView() { exitFullscreen() }
         }
+    }
+
+    private fun isBlockedHost(value: String): Boolean {
+        val h = canonicalHost(value)
+        return blocked.any { h == it || h.endsWith(".$it") }
+    }
+
+    private fun blockedResponse() = WebResourceResponse(
+        "text/plain", "utf-8", 204, "Blocked", emptyMap(),
+        java.io.ByteArrayInputStream(ByteArray(0))
+    )
+
+    // Block script-created popups and new-tab ad links without changing the page's player.
+    @SuppressLint("JavascriptInterface")
+    private fun installPopupGuard() {
+        if (!blocking || !::web.isInitialized) return
+        val script = """
+            (function() {
+              if (window.__strawhatPopupGuard) return;
+              window.__strawhatPopupGuard = true;
+              try {
+                const blocked = ${JSON.stringify([])};
+                const nativeOpen = window.open;
+                window.open = function(url) { return null; };
+                window.showModalDialog = function() { return null; };
+                document.addEventListener('click', function(e) {
+                  let a = e.target;
+                  while (a && a.tagName !== 'A') a = a.parentElement;
+                  if (!a) return;
+                  const target = (a.getAttribute('target') || '').toLowerCase();
+                  const href = a.href || '';
+                  if (target === '_blank' || target === '_new') {
+                    e.preventDefault(); e.stopImmediatePropagation();
+                  }
+                }, true);
+                document.addEventListener('submit', function(e) {
+                  const form = e.target;
+                  if (form && form.target && form.target !== '_self') {
+                    e.preventDefault(); e.stopImmediatePropagation();
+                  }
+                }, true);
+              } catch (_) {}
+            })();
+        """.trimIndent()
+        web.evaluateJavascript(script, null)
     }
 
     private fun hostOf(value: String) = try { URI(value).host?.lowercase(Locale.ROOT) ?: "" } catch (_: Exception) { "" }
