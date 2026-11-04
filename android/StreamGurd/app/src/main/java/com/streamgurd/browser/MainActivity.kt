@@ -115,8 +115,8 @@ class MainActivity : Activity() {
     private fun buildUi() {
         val bg = Color.rgb(8, 12, 23)
         val surface = Color.rgb(23, 33, 53)
-        val muted = Color.rgb(145, 161, 190)
-        val accent = Color.rgb(171, 198, 255)
+        val muted = Color.rgb(178, 183, 190)
+        val accent = Color.rgb(226, 229, 232)
 
         root = FrameLayout(this).apply { setBackgroundColor(bg) }
         contentLayout = LinearLayout(this).apply {
@@ -163,37 +163,56 @@ class MainActivity : Activity() {
         }
         addressBar.addView(url, LinearLayout.LayoutParams(0, dp(42), 1f))
         addressBar.addView(actionButton("GO", true) { open(url.text.toString()) }, LinearLayout.LayoutParams(dp(46), dp(34)))
-        contentLayout.addView(addressBar, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(3) })
+        // Address/search bar is hidden; use Add Website from the floating menu.
 
-        actionRow = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, dp(4), 0, dp(2)) }
-        actionRow.addView(actionButton("＋ Add") { addLink() }, LinearLayout.LayoutParams(0, dp(32), 1f).apply { rightMargin = dp(3) })
-        actionRow.addView(actionButton("☆ Saved") { showSaved() }, LinearLayout.LayoutParams(0, dp(32), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
-        actionRow.addView(actionButton("☷ Sites") { showCatalogue() }, LinearLayout.LayoutParams(0, dp(32), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
-        actionRow.addView(actionButton("⋯ Menu") { menu() }, LinearLayout.LayoutParams(0, dp(32), 1f).apply { leftMargin = dp(3) })
-        actionRow.addView(shield, LinearLayout.LayoutParams(0, dp(32), 1f).apply { leftMargin = dp(3) })
-        actionRow.addView(eye, LinearLayout.LayoutParams(0, dp(32), 1f).apply { leftMargin = dp(3) })
+        actionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(8), dp(8), dp(8), dp(1))
+        }
+        fun addFeature(label: String, onClick: () -> Unit) {
+            actionRow.addView(actionButton(label, false, onClick).apply {
+                textSize = 13f
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(16), 0, dp(12), 0)
+                background = glassShape(0x42FFFFFF, 15)
+            }, LinearLayout.LayoutParams(-1, dp(44)).apply { bottomMargin = dp(7) })
+        }
+        addFeature("＋  Add Website", ::addLink)
+        addFeature("☆  Saved Websites", ::showSaved)
+        addFeature("☷  Anime & Manga Sites", ::showCatalogue)
+        addFeature("⋯  Browser Menu", ::menu)
+        addFeature(if (blocking) "盾  Ad & Tracker Protection: On" else "盾  Ad & Tracker Protection: Off") {
+            blocking = !blocking
+            prefs.edit().putBoolean("blocking", blocking).apply()
+            shield.text = if (blocking) "盾 Protected" else "盾 Paused"
+            (actionRow.getChildAt(4) as? TextView)?.text =
+                if (blocking) "盾  Ad & Tracker Protection: On" else "盾  Ad & Tracker Protection: Off"
+            web.reload()
+        }
+        addFeature("◉  Hide Browser Controls", ::toggleBrowserChrome)
         val topActions = LinearLayout(this).apply {
             tag = "top-actions-panel"
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(9), dp(9), dp(9), dp(9))
-            background = glassShape(0xD91B2A40.toInt(), 22)
+            setPadding(dp(7), dp(7), dp(7), dp(1))
+            background = glassShape(0x70FFFFFF, 22)
             elevation = dp(16).toFloat()
             visibility = View.GONE
         }
-        topActions.addView(actionRow, LinearLayout.LayoutParams(dp(310), dp(42)))
+        topActions.addView(actionRow, LinearLayout.LayoutParams(dp(246), -2))
         val topActionsToggle = actionButton("☰") {
             topActions.visibility = if (topActions.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }.apply {
             textSize = 21f
-            background = glassShape(0xE62A4262.toInt(), 28)
+            background = glassShape(0x66FFFFFF, 28)
             elevation = dp(18).toFloat()
         }
         root.addView(topActions, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply {
-            topMargin = dp(56); rightMargin = dp(12)
+            topMargin = dp(66); rightMargin = dp(12)
         })
         topActionsToggle.tag = "top-actions-toggle"
-        root.addView(topActionsToggle, FrameLayout.LayoutParams(dp(50), dp(50), Gravity.TOP or Gravity.END).apply {
-            topMargin = dp(8); rightMargin = dp(12)
+        root.addView(topActionsToggle, FrameLayout.LayoutParams(dp(46), dp(46), Gravity.TOP or Gravity.END).apply {
+            topMargin = dp(9); rightMargin = dp(12)
         })
 
         statusRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(3), 0, dp(3), dp(2)) }
@@ -415,11 +434,11 @@ class MainActivity : Activity() {
         gravity = Gravity.CENTER
         textSize = 12f
         typeface = Typeface.DEFAULT_BOLD
-        setTextColor(if (prominent) Color.rgb(10, 17, 31) else Color.rgb(215, 226, 245))
+        setTextColor(if (prominent) Color.rgb(25, 29, 34) else Color.rgb(242, 244, 246))
         background = GradientDrawable().apply {
-            setColor(if (prominent) Color.rgb(174, 199, 246) else 0xB82A3B55.toInt())
+            setColor(if (prominent) Color.rgb(226, 229, 232) else 0x52FFFFFF)
             cornerRadius = dp(14).toFloat()
-            setStroke(dp(1), if (prominent) Color.rgb(198, 216, 255) else 0x667F9FC8)
+            setStroke(dp(1), if (prominent) Color.rgb(245, 246, 247) else 0x88FFFFFF.toInt())
         }
         setOnClickListener { click() }
     }
@@ -573,7 +592,7 @@ class MainActivity : Activity() {
         )
     ).apply {
         cornerRadius = dp(radius).toFloat()
-        setStroke(dp(1), 0xA6D5E8FF.toInt())
+        setStroke(dp(1), 0x99FFFFFF.toInt())
     }
 
     private fun showAbout() {
