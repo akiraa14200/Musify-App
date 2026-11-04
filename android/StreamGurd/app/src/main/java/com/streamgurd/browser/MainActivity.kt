@@ -936,6 +936,7 @@ class MainActivity : Activity() {
     }
 
     private fun resolveRedirectInBackground(startUrl: String, baselineHost: String, probeId: Int) {
+        val browserUserAgent = web.settings.userAgentString
         Thread {
             var current = try { URL(startUrl) } catch (_: Exception) { null }
             val initialHost = current?.host?.let { canonicalHost(it) }.orEmpty()
@@ -952,7 +953,7 @@ class MainActivity : Activity() {
                         requestMethod = "GET"
                         connectTimeout = 7000
                         readTimeout = 7000
-                        setRequestProperty("User-Agent", web.settings.userAgentString)
+                        setRequestProperty("User-Agent", browserUserAgent)
                         setRequestProperty("Accept", "text/html,application/xhtml+xml,*/*")
                         CookieManager.getInstance().getCookie(target.toString())?.let {
                             setRequestProperty("Cookie", it)
