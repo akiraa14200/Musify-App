@@ -146,9 +146,7 @@ class MainActivity : Activity() {
             web.reload()
         }
         shield.textSize = 9f
-        headerBar.addView(shield, LinearLayout.LayoutParams(dp(92), dp(32)).apply { rightMargin = dp(6) })
-        val eye = actionButton("◉") { toggleBrowserChrome() }.apply { textSize = 17f }
-        headerBar.addView(eye, LinearLayout.LayoutParams(dp(36), dp(32)))
+        val eye = actionButton("◉ Hide controls") { toggleBrowserChrome() }.apply { textSize = 10f }
         contentLayout.addView(headerBar, LinearLayout.LayoutParams(-1, dp(38)))
 
         addressBar = LinearLayout(this).apply {
@@ -172,7 +170,31 @@ class MainActivity : Activity() {
         actionRow.addView(actionButton("☆ Saved") { showSaved() }, LinearLayout.LayoutParams(0, dp(32), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
         actionRow.addView(actionButton("☷ Sites") { showCatalogue() }, LinearLayout.LayoutParams(0, dp(32), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
         actionRow.addView(actionButton("⋯ Menu") { menu() }, LinearLayout.LayoutParams(0, dp(32), 1f).apply { leftMargin = dp(3) })
-        contentLayout.addView(actionRow, LinearLayout.LayoutParams(-1, dp(38)))
+        actionRow.addView(shield, LinearLayout.LayoutParams(0, dp(32), 1f).apply { leftMargin = dp(3) })
+        actionRow.addView(eye, LinearLayout.LayoutParams(0, dp(32), 1f).apply { leftMargin = dp(3) })
+        val topActions = LinearLayout(this).apply {
+            tag = "top-actions-panel"
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(9), dp(9), dp(9), dp(9))
+            background = glassShape(0xD91B2A40.toInt(), 22)
+            elevation = dp(16).toFloat()
+            visibility = View.GONE
+        }
+        topActions.addView(actionRow, LinearLayout.LayoutParams(dp(310), dp(42)))
+        val topActionsToggle = actionButton("☰") {
+            topActions.visibility = if (topActions.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        }.apply {
+            textSize = 21f
+            background = glassShape(0xE62A4262.toInt(), 28)
+            elevation = dp(18).toFloat()
+        }
+        root.addView(topActions, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply {
+            topMargin = dp(56); rightMargin = dp(12)
+        })
+        topActionsToggle.tag = "top-actions-toggle"
+        root.addView(topActionsToggle, FrameLayout.LayoutParams(dp(50), dp(50), Gravity.TOP or Gravity.END).apply {
+            topMargin = dp(8); rightMargin = dp(12)
+        })
 
         statusRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(3), 0, dp(3), dp(2)) }
         val statusDot = View(this).apply { background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.rgb(104, 215, 163)) } }
@@ -222,7 +244,11 @@ class MainActivity : Activity() {
     private fun setBrowserChromeVisible(visible: Boolean) {
         chromeVisible = visible
         val v = if (visible) View.VISIBLE else View.GONE
-        headerBar.visibility = v; addressBar.visibility = v; actionRow.visibility = v; statusRow.visibility = v
+        headerBar.visibility = v; addressBar.visibility = v; statusRow.visibility = v
+        // The expandable floating top-actions control is part of the root overlay.
+        root.findViewWithTag<View>("top-actions-toggle")?.visibility = v
+        root.findViewWithTag<View>("top-actions-panel")?.visibility =
+            if (visible) View.GONE else View.GONE
         browserBar.visibility = if (visible && web.visibility == View.VISIBLE) View.VISIBLE else View.GONE
         peekButton.visibility = if (visible) View.GONE else View.VISIBLE
     }
@@ -538,10 +564,16 @@ class MainActivity : Activity() {
             }
         }.show()
     }
-    private fun glassShape(color: Int, radius: Int) = GradientDrawable().apply {
-        setColor(color)
+    private fun glassShape(color: Int, radius: Int) = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
+        intArrayOf(
+            Color.argb(220, 111, 148, 194),
+            color,
+            Color.argb(205, 18, 29, 48)
+        )
+    ).apply {
         cornerRadius = dp(radius).toFloat()
-        setStroke(dp(1), 0x667F9FC8)
+        setStroke(dp(1), 0xA6D5E8FF.toInt())
     }
 
     private fun showAbout() {
