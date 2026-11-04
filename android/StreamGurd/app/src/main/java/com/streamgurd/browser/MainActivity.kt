@@ -43,12 +43,7 @@ class MainActivity : Activity() {
     private lateinit var actionRow: LinearLayout
     private lateinit var statusRow: LinearLayout
     private lateinit var browserBar: LinearLayout
-    private val hideChromeRunnable = Runnable {
-        if (web.visibility == View.VISIBLE) {
-            addressBar.visibility = View.GONE
-            browserBar.visibility = View.GONE
-        }
-    }
+
     private var blocking = true
     private var host = ""
     private var trustedHost = ""
