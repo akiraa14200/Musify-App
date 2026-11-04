@@ -211,12 +211,12 @@ class MainActivity : Activity() {
         addFeature("☆  Saved Websites", ::showSaved)
         addFeature("☷  Anime & Manga Sites", ::showCatalogue)
         addFeature("⋯  Browser Menu", ::menu)
-        addFeature(if (blocking) "盾  Ad & Tracker Protection: On" else "盾  Ad & Tracker Protection: Off") {
+        addFeature(if (blocking) "盾  Redirect Protection: On" else "盾  Redirect Protection: Off") {
             blocking = !blocking
             prefs.edit().putBoolean("blocking", blocking).apply()
             shield.text = if (blocking) "盾 Protected" else "盾 Paused"
             (actionRow.getChildAt(4) as? TextView)?.text =
-                if (blocking) "盾  Ad & Tracker Protection: On" else "盾  Ad & Tracker Protection: Off"
+                if (blocking) "盾  Redirect Protection: On" else "盾  Redirect Protection: Off"
             web.reload()
         }
         addFeature("◉  Hide Browser Controls", ::toggleBrowserChrome)
@@ -845,13 +845,7 @@ class MainActivity : Activity() {
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(web,false)
         web.webViewClient = object : WebViewClient() {
-            override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
-                val uri = request?.url ?: return null
-                val h = uri.host?.lowercase(Locale.ROOT) ?: return null
-                val denied = blocking && isBlockedHost(h)
-                return if(denied) blockedResponse()
-                    else super.shouldInterceptRequest(view,request)
-            }
+            // No request filtering: site scripts, images, video streams and CDNs remain untouched.
             override fun onPageStarted(view: WebView?, page: String?, favicon: android.graphics.Bitmap?) {
                 page?.let { url.setText(it); host = hostOf(it); status.text = "LOADING · $host" }
                 if (blocking) installPopupGuard()
@@ -861,25 +855,15 @@ class MainActivity : Activity() {
             }
             override fun onPageFinished(view: WebView?, page: String?) {
                 page?.let { prefs.edit().putString("last_url",it).apply(); saveHistory(it) }
-                status.text = if(blocking) "PROTECTION ACTIVE · $host" else "PROTECTION PAUSED · $host"
+                status.text = if(blocking) "REDIRECT PROTECTION ON · $host" else "REDIRECT PROTECTION OFF · $host"
             }
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val uri = request?.url ?: return true
                 val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return true
                 if (scheme !in listOf("http", "https")) return true
 
-                // Only guard top-level page changes. Embedded players, images, scripts,
-                // and other subframe resources remain available unless their host is blocked.
-                if (request.isForMainFrame) {
-                    val destination = uri.host?.lowercase(Locale.ROOT) ?: return true
-                    // Do not restrict navigation to the original site's domain.
-                    // Many streaming sites legitimately use separate player/CDN/auth hosts.
-                    // Only stop destinations explicitly listed in the ad-domain filter.
-                    if (blocking && isBlockedHost(destination)) {
-                        status.text = "AD REDIRECT BLOCKED · $destination"
-                        return true
-                    }
-                }
+                // Allow normal navigation, including cross-domain players and CDNs.
+                // Pop-up and new-tab attempts are handled by installPopupGuard().
                 return false
             }
 
@@ -888,12 +872,7 @@ class MainActivity : Activity() {
                 val uri = try { URI(url ?: return true) } catch (_: Exception) { return true }
                 val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return true
                 if (scheme !in listOf("http", "https")) return true
-                val destination = uri.host?.lowercase(Locale.ROOT) ?: return true
-                // Legacy WebView callback: allow legitimate cross-domain navigation.
-                if (blocking && isBlockedHost(destination)) {
-                    status.text = "AD REDIRECT BLOCKED · $destination"
-                    return true
-                }
+                // Allow normal navigation; the popup guard handles new tabs.
                 return false
             }
         }
@@ -910,17 +889,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun isBlockedHost(value: String): Boolean {
-        val h = canonicalHost(value)
-        return blocked.any { h == it || h.endsWith(".$it") }
-    }
-
-    private fun blockedResponse() = WebResourceResponse(
-        "text/plain", "utf-8", 204, "Blocked", emptyMap(),
-        java.io.ByteArrayInputStream(ByteArray(0))
-    )
-
-    // Block script-created popups and new-tab ad links without changing the page's player.
+    // Prevent pop-up windows and new-tab launches without filtering site resources.
     @SuppressLint("JavascriptInterface")
     private fun installPopupGuard() {
         if (!blocking || !::web.isInitialized) return
@@ -1004,7 +973,7 @@ class MainActivity : Activity() {
         prefs.edit().putString("history",list.take(80).joinToString("\n")).apply()
     }
     private fun menu() {
-        val choices = arrayOf(if(blocking) "Pause ad blocking" else "Enable ad blocking","Refresh","Back","Forward","Save current website","History","Clear cookies and cache","About Strawhat Pirate","Privacy policy","Terms of use")
+        val choices = arrayOf(if(blocking) "Pause redirect protection" else "Enable redirect protection","Refresh","Back","Forward","Save current website","History","Clear cookies and cache","About Strawhat Pirate","Privacy policy","Terms of use")
         AlertDialog.Builder(this).setTitle("Strawhat Pirate").setItems(choices) { _,i ->
             when(i) {
                 0 -> { blocking = !blocking; prefs.edit().putBoolean("blocking",blocking).apply(); web.reload() }
@@ -1016,7 +985,7 @@ class MainActivity : Activity() {
                 6 -> { CookieManager.getInstance().removeAllCookies(null); web.clearCache(true); web.clearHistory(); toast("Browser data cleared") }
                 7 -> showAbout()
                 8 -> showPolicy("Privacy policy", "Strawhat Pirate stores bookmarks, browsing history, catalogue cache and your last opened page locally on this device. Website requests go directly to the sites you visit. The app does not operate an account system or sell personal data. Websites may use their own cookies and tracking technologies. Clearing browser data removes local cookies, cache and history.")
-                9 -> showPolicy("Terms of use", "Use Strawhat Pirate lawfully and respect each website's terms, copyright and access rules. You are responsible for the websites and content you choose to visit. The built-in filter blocks selected known ad and tracker domains only; it does not guarantee complete ad removal, privacy, security or uninterrupted access. The app is provided as-is. Do not use it to bypass access controls or infringe anyone's rights.")
+                9 -> showPolicy("Terms of use", "Use Strawhat Pirate lawfully and respect each website's terms, copyright and access rules. You are responsible for the websites and content you choose to visit. Redirect protection prevents pop-up windows and links that try to open new tabs; it does not block advertisements or guarantee protection from every redirect. The app is provided as-is. Do not use it to bypass access controls or infringe anyone's rights.")
             }
         }.show()
     }
