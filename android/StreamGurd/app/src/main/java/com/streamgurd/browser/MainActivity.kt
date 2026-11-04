@@ -85,24 +85,18 @@ class MainActivity : Activity() {
         // Explicitly reserve the status-bar/notch and bottom system-gesture areas.
         // Content and browser controls are laid out only inside the remaining safe area.
         root?.setOnApplyWindowInsetsListener { view, insets ->
-            val top: Int
-            val bottom: Int
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            val safeInsets = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
                 val bars = insets.getInsets(
                     WindowInsets.Type.statusBars() or
                     WindowInsets.Type.navigationBars() or
                     WindowInsets.Type.displayCutout()
                 )
-                top = maxOf(bars.top, insets.displayCutout?.safeInsetTop ?: 0)
-                bottom = bars.bottom
+                Pair(maxOf(bars.top, insets.displayCutout?.safeInsetTop ?: 0), bars.bottom)
             } else {
                 @Suppress("DEPRECATION")
-                run {
-                    top = maxOf(insets.systemWindowInsetTop, insets.systemWindowInsetTop)
-                    bottom = insets.systemWindowInsetBottom
-                }
+                Pair(insets.systemWindowInsetTop, insets.systemWindowInsetBottom)
             }
-            view.setPadding(0, top, 0, bottom)
+            view.setPadding(0, safeInsets.first, 0, safeInsets.second)
             insets
         }
         root?.requestApplyInsets()
