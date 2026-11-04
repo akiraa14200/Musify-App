@@ -44,7 +44,6 @@ class MainActivity : Activity() {
     private lateinit var addressBar: LinearLayout
     private lateinit var actionRow: LinearLayout
     private lateinit var statusRow: LinearLayout
-    private lateinit var browserBar: LinearLayout
 
     private var blocking = true
     private var host = ""
@@ -289,21 +288,10 @@ class MainActivity : Activity() {
         web = WebView(this)
         root.addView(web, 0, FrameLayout.LayoutParams(-1, -1))
         web.visibility = View.GONE
-        browserBar = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, dp(3), 0, 0); background = glassShape(0xCC17243A.toInt(), 18) }
-        browserBar.addView(actionButton("‹ Back") { if (web.canGoBack()) web.goBack() }, LinearLayout.LayoutParams(0, dp(34), 1f).apply { rightMargin = dp(3) })
-        browserBar.addView(actionButton("Forward ›") { if (web.canGoForward()) web.goForward() }, LinearLayout.LayoutParams(0, dp(34), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
-        browserBar.addView(actionButton("↻ Reload") { web.reload() }, LinearLayout.LayoutParams(0, dp(34), 1f).apply { leftMargin = dp(3) })
-        // Pin browser navigation to the bottom edge of the app content.
-        // It floats above the page without covering Android's system navigation area.
-        root.addView(browserBar, FrameLayout.LayoutParams(-1, dp(42), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
-            leftMargin = dp(14); rightMargin = dp(14); bottomMargin = dp(10)
-        })
-
         peekButton = actionButton("◉") { toggleBrowserChrome() }.apply { textSize = 18f; visibility = View.GONE; elevation = dp(8).toFloat() }
         root.addView(peekButton, FrameLayout.LayoutParams(dp(42), dp(42), Gravity.END or Gravity.BOTTOM).apply { rightMargin = dp(10); bottomMargin = dp(10) })
         setContentView(root)
         web.visibility = View.GONE
-        browserBar.visibility = View.GONE
         showHome()
     }
 
@@ -317,7 +305,6 @@ class MainActivity : Activity() {
         root.findViewWithTag<View>("top-actions-toggle")?.visibility = v
         root.findViewWithTag<View>("top-actions-panel")?.visibility =
             if (visible) View.GONE else View.GONE
-        browserBar.visibility = if (visible && web.visibility == View.VISIBLE) View.VISIBLE else View.GONE
         peekButton.visibility = if (visible) View.GONE else View.VISIBLE
     }
     private fun cachedCatalogue(category: String): List<SiteEntry> {
@@ -596,7 +583,6 @@ class MainActivity : Activity() {
         web.visibility = View.GONE
         homePanel.visibility = View.VISIBLE
         setBrowserChromeVisible(true)
-        browserBar.visibility = View.GONE
     }
     private fun addLink() {
         val field = EditText(this).apply { hint = "https://example.com"; setTextColor(Color.WHITE); setHintTextColor(Color.GRAY); setSingleLine(true) }
