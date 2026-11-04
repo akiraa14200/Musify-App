@@ -28,7 +28,7 @@ class MainActivity : Activity() {
             mainHandler.postDelayed(this, 15 * 60 * 1000L)
         }
     }
-    private val catalogueCsvUrl = "https://docs.google.com/spreadsheets/d/1VLCJE_YxSQlPbjQojaFTy1ZzrmpitetsAXDgTUpbHzs/export?format=csv&gid=0"
+    private val catalogueCsvUrl = "https://docs.google.com/spreadsheets/d/1VLCJE_YxSQlPbjQojaFTy1ZzrmpitetsAXDgTUpbHzs/export?format=csv"
     private lateinit var root: LinearLayout
     private lateinit var web: WebView
     private lateinit var url: EditText
@@ -321,7 +321,7 @@ class MainActivity : Activity() {
         row.add(cell.toString().trim())
         if (row.any { it.isNotBlank() }) rows.add(row.toList())
         if (rows.isEmpty()) return emptyList()
-        val header = rows.first().map { it.trim().lowercase(Locale.ROOT) }
+        val header = rows.first().map { it.trim().removePrefix("\uFEFF").lowercase(Locale.ROOT) }
         val nameIndex = header.indexOfFirst { it == "site name" || it == "sitename" || it == "name" }
         val urlIndex = header.indexOfFirst { it == "site url" || it == "siteurl" || it == "url" }
         if (nameIndex < 0 || urlIndex < 0) return emptyList()
