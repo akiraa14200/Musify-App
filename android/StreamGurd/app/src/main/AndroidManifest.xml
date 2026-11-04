@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
-    <application android:label="Strawhat Pirate" android:icon="@drawable/strawhat_logo" android:roundIcon="@drawable/strawhat_logo" android:theme="@style/AppTheme" android:usesCleartextTraffic="false" android:allowBackup="false">
+    <application android:label="Strawhat Pirate" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:theme="@style/AppTheme" android:usesCleartextTraffic="false" android:allowBackup="false">
         <activity android:name=".MainActivity" android:configChanges="orientation|screenSize|keyboardHidden" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
