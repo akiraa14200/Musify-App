@@ -872,8 +872,11 @@ class MainActivity : Activity() {
                 // and other subframe resources remain available unless their host is blocked.
                 if (request.isForMainFrame) {
                     val destination = uri.host?.lowercase(Locale.ROOT) ?: return true
-                    if (isBlockedHost(destination) || !isTrustedSiteHost(destination)) {
-                        status.text = "BLOCKED REDIRECT · $destination"
+                    // Do not restrict navigation to the original site's domain.
+                    // Many streaming sites legitimately use separate player/CDN/auth hosts.
+                    // Only stop destinations explicitly listed in the ad-domain filter.
+                    if (blocking && isBlockedHost(destination)) {
+                        status.text = "AD REDIRECT BLOCKED · $destination"
                         return true
                     }
                 }
@@ -886,8 +889,9 @@ class MainActivity : Activity() {
                 val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return true
                 if (scheme !in listOf("http", "https")) return true
                 val destination = uri.host?.lowercase(Locale.ROOT) ?: return true
-                if (isBlockedHost(destination) || !isTrustedSiteHost(destination)) {
-                    status.text = "BLOCKED REDIRECT · $destination"
+                // Legacy WebView callback: allow legitimate cross-domain navigation.
+                if (blocking && isBlockedHost(destination)) {
+                    status.text = "AD REDIRECT BLOCKED · $destination"
                     return true
                 }
                 return false
