@@ -76,7 +76,7 @@ class MainActivity : Activity() {
         }
         url = EditText(this).apply {
             hint = "Paste website link"; setHintTextColor(Color.GRAY); setTextColor(Color.WHITE)
-            textSize = 14f; singleLine = true; setBackgroundColor(Color.TRANSPARENT)
+            textSize = 14f; setSingleLine(true); setBackgroundColor(Color.TRANSPARENT)
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_GO
             setOnEditorActionListener { _,_,_ -> open(text.toString()); true }
         }
