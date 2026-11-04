@@ -789,45 +789,79 @@ class MainActivity : Activity() {
         }.start()
     }
 
-    private val pipedApiInstances = listOf(
-        "https://pipedapi.adminforge.de",
+    // Piped's public servers change frequently. Refresh the official list periodically
+    // instead of depending on a few hard-coded hosts that may have gone offline.
+    @Volatile private var cachedPipedInstances: List<String> = emptyList()
+    @Volatile private var pipedInstancesFetchedAt: Long = 0L
+
+    private val pipedFallbackInstances = listOf(
         "https://pipedapi.kavin.rocks",
-        "https://pipedapi.in.projectsegfau.lt"
+        "https://pipedapi.adminforge.de",
+        "https://pipedapi.leptons.xyz",
+        "https://pipedapi.nosebs.ru",
+        "https://pipedapi-libre.kavin.rocks",
+        "https://piped-api.privacy.com.de",
+        "https://api.piped.yt",
+        "https://pipedapi.drgns.space",
+        "https://pipedapi.owo.si",
+        "https://pipedapi.ducks.party",
+        "https://piped-api.codespace.cz",
+        "https://pipedapi.reallyaweso.me",
+        "https://api.piped.private.coffee",
+        "https://pipedapi.darkness.services",
+        "https://pipedapi.orangenet.cc"
     )
+
+    private fun pipedInstances(): List<String> {
+        val now = SystemClock.elapsedRealtime()
+        if (cachedPipedInstances.isNotEmpty() && now - pipedInstancesFetchedAt < 6 * 60 * 60 * 1000L) {
+            return cachedPipedInstances
+        }
+
+        val discovered = LinkedHashSet<String>()
+        var connection: HttpURLConnection? = null
+        try {
+            val source = URL("https://raw.githubusercontent.com/TeamPiped/documentation/main/content/docs/public-instances/index.md")
+            connection = (source.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 4500
+                readTimeout = 5500
+                requestMethod = "GET"
+                setRequestProperty("Accept", "text/plain")
+                setRequestProperty("User-Agent", "StrawhatPirate/1.2 (Android)")
+            }
+            if (connection.responseCode in 200..299) {
+                val markdown = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val urlPattern = Regex("https?://[A-Za-z0-9.-]+")
+                for (match in urlPattern.findAll(markdown)) {
+                    val candidate = match.value.trimEnd('.').trim()
+                    val host = try { URI(candidate).host?.lowercase(Locale.ROOT).orEmpty() } catch (_: Exception) { "" }
+                    if (host.isNotBlank() && host.contains("piped") &&
+                        !host.contains("frontend") && !host.contains("proxy")) {
+                        discovered.add(candidate.trimEnd('/'))
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            // The last-known/fallback list still lets the player work when GitHub is offline.
+        } finally {
+            connection?.disconnect()
+        }
+
+        discovered.addAll(pipedFallbackInstances)
+        val result = discovered.toList()
+        cachedPipedInstances = result
+        pipedInstancesFetchedAt = now
+        return result
+    }
 
     private fun pipedRequest(path: String): org.json.JSONObject {
         var lastError: Exception? = null
-        for (base in pipedApiInstances) {
+        for (base in pipedInstances()) {
             var connection: HttpURLConnection? = null
             try {
                 connection = (URL(base + path).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 7000
-                    readTimeout = 12000
-                    requestMethod = "GET"
-                    setRequestProperty("Accept", "application/json")
-                    setRequestProperty("User-Agent", "StrawhatPirate/1.1 (Android)")
-                }
-                val code = connection.responseCode
-                if (code !in 200..299) throw IllegalStateException("Piped HTTP $code")
-                val body = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                return org.json.JSONObject(body)
-            } catch (e: Exception) {
-                lastError = e
-            } finally {
-                connection?.disconnect()
-            }
-        }
-        throw IllegalStateException("YouTube music service is temporarily unavailable", lastError)
-    }
-
-    private fun pipedSearchRequest(path: String): org.json.JSONArray {
-        var lastError: Exception? = null
-        for (base in pipedApiInstances) {
-            var connection: HttpURLConnection? = null
-            try {
-                connection = (URL(base + path).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 8000
-                    readTimeout = 15000
+                    connectTimeout = 5500
+                    readTimeout = 10000
                     requestMethod = "GET"
                     setRequestProperty("Accept", "application/json")
                     setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
@@ -835,22 +869,81 @@ class MainActivity : Activity() {
                 val code = connection.responseCode
                 if (code !in 200..299) throw IllegalStateException("Piped HTTP $code")
                 val body = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                when (val parsed = org.json.JSONTokener(body).nextValue()) {
-                    is org.json.JSONArray -> return parsed
-                    is org.json.JSONObject -> {
-                        parsed.optJSONArray("items")?.let { return it }
-                        parsed.optJSONArray("results")?.let { return it }
-                        throw IllegalStateException("Unexpected Piped search response")
-                    }
-                    else -> throw IllegalStateException("Invalid Piped search response")
-                }
+                val parsed = org.json.JSONTokener(body).nextValue()
+                if (parsed !is org.json.JSONObject) throw IllegalStateException("Unexpected Piped stream response")
+                return parsed
             } catch (e: Exception) {
                 lastError = e
             } finally {
                 connection?.disconnect()
             }
         }
-        throw IllegalStateException("All YouTube search instances failed", lastError)
+        throw IllegalStateException("No reachable Piped server could resolve this YouTube stream", lastError)
+    }
+
+    private fun pipedSearchRequest(path: String): org.json.JSONArray {
+        var lastError: Exception? = null
+        for (base in pipedInstances()) {
+            var connection: HttpURLConnection? = null
+            try {
+                connection = (URL(base + path).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 5500
+                    readTimeout = 10000
+                    requestMethod = "GET"
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
+                }
+                val code = connection.responseCode
+                if (code !in 200..299) throw IllegalStateException("Piped HTTP $code")
+                val body = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val parsed = org.json.JSONTokener(body).nextValue()
+                val items = when (parsed) {
+                    is org.json.JSONArray -> parsed
+                    is org.json.JSONObject -> parsed.optJSONArray("items")
+                        ?: parsed.optJSONArray("results")
+                        ?: throw IllegalStateException("Piped search page did not contain items")
+                    else -> throw IllegalStateException("Invalid Piped search response")
+                }
+                // An empty music-only response can be an instance-side filter bug.
+                // Treat it as a valid result only after the regular search has also been checked.
+                if (items.length() == 0 && path.contains("filter=music_songs")) {
+                    val generalPath = path.substringBefore("&filter=")
+                    val general = pipedSearchRequestOnSameInstance(base, generalPath)
+                    if (general.length() > 0) return general
+                }
+                return items
+            } catch (e: Exception) {
+                lastError = e
+            } finally {
+                connection?.disconnect()
+            }
+        }
+        throw IllegalStateException("All discovered YouTube search servers are unavailable", lastError)
+    }
+
+    private fun pipedSearchRequestOnSameInstance(base: String, path: String): org.json.JSONArray {
+        var connection: HttpURLConnection? = null
+        try {
+            connection = (URL(base + path).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 4500
+                readTimeout = 8000
+                requestMethod = "GET"
+                setRequestProperty("Accept", "application/json")
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
+            }
+            if (connection.responseCode !in 200..299) return org.json.JSONArray()
+            val body = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            return when (val parsed = org.json.JSONTokener(body).nextValue()) {
+                is org.json.JSONArray -> parsed
+                is org.json.JSONObject -> parsed.optJSONArray("items")
+                    ?: parsed.optJSONArray("results") ?: org.json.JSONArray()
+                else -> org.json.JSONArray()
+            }
+        } catch (_: Exception) {
+            return org.json.JSONArray()
+        } finally {
+            connection?.disconnect()
+        }
     }
 
     private fun searchPipedMusic(raw: String, tracks: MutableList<MusicTrack>, adapter: BaseAdapter, info: TextView) {
@@ -893,7 +986,7 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     if (requestId != musicSearchRequest) return@runOnUiThread
                     musicSearchInFlight = false
-                    info.text = "YouTube search is temporarily unavailable. Try again or switch to Saavn."
+                    info.text = "YouTube search servers are unreachable right now. Check your connection or switch to Saavn."
                 }
             }
         }.start()
