@@ -116,8 +116,8 @@ class MainActivity : Activity() {
         }
         brandText.addView(text("StreamGurd", 20f, Color.WHITE, true))
         brandText.addView(text("PRIVATE BROWSING", 9f, muted, true))
-        header.addView(brandText)
-        header.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        headerBar.addView(brandText)
+        headerBar.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         val shield = TextView(this).apply {
             text = if (blocking) "盾  PROTECTED" else "盾  PAUSED"
             textSize = 11f
@@ -138,7 +138,7 @@ class MainActivity : Activity() {
                 web.reload()
             }
         }
-        header.addView(shield)
+        headerBar.addView(shield)
         root.addView(headerBar, LinearLayout.LayoutParams(-1, dp(56)))
 
         // Rounded address field
@@ -166,8 +166,8 @@ class MainActivity : Activity() {
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
             setOnEditorActionListener { _, _, _ -> open(text.toString()); true }
         }
-        addressCard.addView(url, LinearLayout.LayoutParams(0, dp(48), 1f))
-        addressCard.addView(actionButton("GO", true) { open(url.text.toString()) },
+        addressBar.addView(url, LinearLayout.LayoutParams(0, dp(48), 1f))
+        addressBar.addView(actionButton("GO", true) { open(url.text.toString()) },
             LinearLayout.LayoutParams(dp(52), dp(40)))
         root.addView(addressBar, LinearLayout.LayoutParams(-1, dp(56)))
 
@@ -178,11 +178,11 @@ class MainActivity : Activity() {
         }
         actionRow.addView(actionButton("＋  Add") { addLink() },
             LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(4) })
-        actions.addView(actionButton("☆  Saved") { showSaved() },
+        actionRow.addView(actionButton("☆  Saved") { showSaved() },
             LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(4); rightMargin = dp(4) })
-        actions.addView(actionButton("☷  Sites") { showCatalogue() },
+        actionRow.addView(actionButton("☷  Sites") { showCatalogue() },
             LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(5); rightMargin = dp(5) })
-        actions.addView(actionButton("⋯  Menu") { menu() },
+        actionRow.addView(actionButton("⋯  Menu") { menu() },
             LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(5) })
         root.addView(actionRow)
 
