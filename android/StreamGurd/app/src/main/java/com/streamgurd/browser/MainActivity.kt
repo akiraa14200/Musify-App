@@ -184,7 +184,7 @@ class MainActivity : Activity() {
         status.text = "READY · Blocking known ad and tracker domains"
     }
     private fun addLink() {
-        val field = EditText(this).apply { hint = "https://example.com"; setTextColor(Color.WHITE); setHintTextColor(Color.GRAY); singleLine = true }
+        val field = EditText(this).apply { hint = "https://example.com"; setTextColor(Color.WHITE); setHintTextColor(Color.GRAY); setSingleLine(true) }
         AlertDialog.Builder(this).setTitle("Add website link").setView(field)
             .setNegativeButton("Cancel",null).setPositiveButton("Open") { _,_ -> open(field.text.toString()) }.show()
     }
