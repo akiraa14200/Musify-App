@@ -12,6 +12,7 @@ import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
 import android.webkit.*
 import android.widget.*
 import java.net.URI
@@ -29,7 +30,10 @@ class MainActivity : Activity() {
         }
     }
     private val catalogueCsvUrl = "https://docs.google.com/spreadsheets/d/1VLCJE_YxSQlPbjQojaFTy1ZzrmpitetsAXDgTUpbHzs/export?format=csv"
-    private lateinit var root: LinearLayout
+    private lateinit var root: FrameLayout
+    private lateinit var contentLayout: LinearLayout
+    private lateinit var peekButton: TextView
+    private var chromeVisible = true
     private lateinit var web: WebView
     private lateinit var url: EditText
     private lateinit var status: TextView
@@ -82,191 +86,123 @@ class MainActivity : Activity() {
         }
     private fun buildUi() {
         val bg = Color.rgb(8, 12, 23)
-        val panel = Color.rgb(17, 25, 42)
         val surface = Color.rgb(23, 33, 53)
         val muted = Color.rgb(145, 161, 190)
         val accent = Color.rgb(171, 198, 255)
 
-        root = LinearLayout(this).apply {
+        root = FrameLayout(this).apply { setBackgroundColor(bg) }
+        root.setOnApplyWindowInsetsListener { view, insets ->
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                val bars = insets.getInsets(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                view.setPadding(0, bars.top, 0, bars.bottom)
+            } else {
+                @Suppress("DEPRECATION")
+                view.setPadding(0, insets.systemWindowInsetTop, 0, insets.systemWindowInsetBottom)
+            }
+            insets
+        }
+        contentLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(12), dp(16), dp(10))
+            setPadding(dp(10), dp(5), dp(10), dp(4))
             setBackgroundColor(bg)
         }
+        root.addView(contentLayout, FrameLayout.LayoutParams(-1, -1))
 
-        // Brand header and live protection indicator
-        headerBar = LinearLayout(this).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(3), 0, dp(12))
-        }
+        headerBar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(2), 0, dp(2), dp(3)) }
         val brandMark = TextView(this).apply {
-            text = "S"
-            textSize = 20f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
+            text = "S"; textSize = 17f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
             setTextColor(Color.rgb(9, 15, 29))
-            background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                intArrayOf(Color.rgb(190, 211, 255), Color.rgb(115, 151, 220))).apply {
-                cornerRadius = dp(15).toFloat()
-            }
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(190, 211, 255), Color.rgb(115, 151, 220))).apply { cornerRadius = dp(11).toFloat() }
         }
-        headerBar.addView(brandMark, LinearLayout.LayoutParams(dp(42), dp(42)))
-        val brandText = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(10), 0, 0, 0)
-        }
-        brandText.addView(text("StreamGurd", 20f, Color.WHITE, true))
-        brandText.addView(text("PRIVATE BROWSING", 9f, muted, true))
+        headerBar.addView(brandMark, LinearLayout.LayoutParams(dp(34), dp(34)))
+        val brandText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(8), 0, 0, 0) }
+        brandText.addView(text("StreamGurd", 16f, Color.WHITE, true))
+        brandText.addView(text("PRIVATE BROWSING", 8f, muted, true))
         headerBar.addView(brandText)
         headerBar.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
-        val shield = TextView(this).apply {
-            text = if (blocking) "盾  PROTECTED" else "盾  PAUSED"
-            textSize = 11f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            setTextColor(if (blocking) accent else Color.rgb(255, 196, 140))
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            background = GradientDrawable().apply {
-                setColor(if (blocking) Color.rgb(27, 43, 69) else Color.rgb(55, 39, 28))
-                cornerRadius = dp(30).toFloat()
-                setStroke(dp(1), if (blocking) Color.rgb(56, 79, 117) else Color.rgb(112, 76, 43))
-            }
-            setOnClickListener {
-                blocking = !blocking
-                prefs.edit().putBoolean("blocking", blocking).apply()
-                text = if (blocking) "盾  PROTECTED" else "盾  PAUSED"
-                setTextColor(if (blocking) accent else Color.rgb(255, 196, 140))
-                web.reload()
-            }
+        lateinit var shield: TextView
+        shield = actionButton(if (blocking) "盾 Protected" else "盾 Paused") {
+            blocking = !blocking
+            prefs.edit().putBoolean("blocking", blocking).apply()
+            shield.text = if (blocking) "盾 Protected" else "盾 Paused"
+            web.reload()
         }
-        headerBar.addView(shield)
-        root.addView(headerBar, LinearLayout.LayoutParams(-1, dp(56)))
+        shield.textSize = 9f
+        headerBar.addView(shield, LinearLayout.LayoutParams(dp(92), dp(32)).apply { rightMargin = dp(6) })
+        val eye = actionButton("◉") { toggleBrowserChrome() }.apply { textSize = 17f }
+        headerBar.addView(eye, LinearLayout.LayoutParams(dp(36), dp(32)))
+        contentLayout.addView(headerBar, LinearLayout.LayoutParams(-1, dp(38)))
 
-        // Rounded address field
         addressBar = LinearLayout(this).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(13), dp(3), dp(5), dp(3))
-            background = GradientDrawable().apply {
-                setColor(surface)
-                cornerRadius = dp(18).toFloat()
-                setStroke(dp(1), Color.rgb(42, 56, 82))
-            }
+            gravity = Gravity.CENTER_VERTICAL; setPadding(dp(9), 0, dp(4), 0)
+            background = GradientDrawable().apply { setColor(surface); cornerRadius = dp(13).toFloat(); setStroke(dp(1), Color.rgb(42, 56, 82)) }
         }
-        addressBar.addView(text("⌕", 25f, accent, true).apply {
-            gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(dp(30), dp(46)))
+        addressBar.addView(text("⌕", 20f, accent, true).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(26), dp(40)))
         url = EditText(this).apply {
-            hint = "Search or enter website address"
-            setHintTextColor(Color.rgb(112, 128, 154))
-            setTextColor(Color.WHITE)
-            textSize = 13f
-            setSingleLine(true)
-            setPadding(dp(5), 0, dp(5), 0)
-            setBackgroundColor(Color.TRANSPARENT)
+            hint = "Search or enter website"; setHintTextColor(Color.rgb(112, 128, 154)); setTextColor(Color.WHITE)
+            textSize = 12f; setSingleLine(true); setPadding(dp(3), 0, dp(3), 0); setBackgroundColor(Color.TRANSPARENT)
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_GO
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
             setOnEditorActionListener { _, _, _ -> open(text.toString()); true }
         }
-        addressBar.addView(url, LinearLayout.LayoutParams(0, dp(48), 1f))
-        addressBar.addView(actionButton("GO", true) { open(url.text.toString()) },
-            LinearLayout.LayoutParams(dp(52), dp(40)))
-        root.addView(addressBar, LinearLayout.LayoutParams(-1, dp(56)))
+        addressBar.addView(url, LinearLayout.LayoutParams(0, dp(42), 1f))
+        addressBar.addView(actionButton("GO", true) { open(url.text.toString()) }, LinearLayout.LayoutParams(dp(46), dp(34)))
+        contentLayout.addView(addressBar, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(3) })
 
-        // Main shortcuts
-        actionRow = LinearLayout(this).apply {
-            gravity = Gravity.CENTER
-            setPadding(0, dp(10), 0, dp(10))
-        }
-        actionRow.addView(actionButton("＋  Add") { addLink() },
-            LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(4) })
-        actionRow.addView(actionButton("☆  Saved") { showSaved() },
-            LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(4); rightMargin = dp(4) })
-        actionRow.addView(actionButton("☷  Sites") { showCatalogue() },
-            LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(5); rightMargin = dp(5) })
-        actionRow.addView(actionButton("⋯  Menu") { menu() },
-            LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(5) })
-        root.addView(actionRow)
+        actionRow = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, dp(4), 0, dp(2)) }
+        actionRow.addView(actionButton("＋ Add") { addLink() }, LinearLayout.LayoutParams(0, dp(32), 1f).apply { rightMargin = dp(3) })
+        actionRow.addView(actionButton("☆ Saved") { showSaved() }, LinearLayout.LayoutParams(0, dp(32), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
+        actionRow.addView(actionButton("☷ Sites") { showCatalogue() }, LinearLayout.LayoutParams(0, dp(32), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
+        actionRow.addView(actionButton("⋯ Menu") { menu() }, LinearLayout.LayoutParams(0, dp(32), 1f).apply { leftMargin = dp(3) })
+        contentLayout.addView(actionRow, LinearLayout.LayoutParams(-1, dp(38)))
 
-        statusRow = LinearLayout(this).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(2), dp(2), dp(2), dp(9))
-        }
-        val statusDot = View(this).apply {
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Color.rgb(104, 215, 163))
-            }
-        }
-        statusRow.addView(statusDot, LinearLayout.LayoutParams(dp(7), dp(7)))
-        status = text("  READY  ·  Ad and tracker protection is on", 10f, muted)
+        statusRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(3), 0, dp(3), dp(2)) }
+        val statusDot = View(this).apply { background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.rgb(104, 215, 163)) } }
+        statusRow.addView(statusDot, LinearLayout.LayoutParams(dp(6), dp(6)))
+        status = text("  READY · Protection active", 9f, muted)
         statusRow.addView(status)
-        statusRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
-        root.addView(statusRow)
+        contentLayout.addView(statusRow, LinearLayout.LayoutParams(-1, dp(17)))
 
         homePanel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(dp(20), dp(20), dp(20), dp(20))
-            background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                intArrayOf(Color.rgb(24, 37, 61), Color.rgb(14, 21, 36))).apply {
-                cornerRadius = dp(26).toFloat()
-                setStroke(dp(1), Color.rgb(42, 59, 88))
-            }
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(18), dp(18), dp(18), dp(18))
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(24, 37, 61), Color.rgb(14, 21, 36))).apply { cornerRadius = dp(24).toFloat(); setStroke(dp(1), Color.rgb(42, 59, 88)) }
         }
-        val heroIcon = TextView(this).apply {
-            text = "◈"
-            textSize = 38f
-            gravity = Gravity.CENTER
-            setTextColor(accent)
-            background = GradientDrawable().apply {
-                setColor(Color.rgb(35, 53, 83))
-                cornerRadius = dp(22).toFloat()
-            }
-        }
-        homePanel.addView(heroIcon, LinearLayout.LayoutParams(dp(68), dp(68)).apply {
-            gravity = Gravity.CENTER
-            bottomMargin = dp(16)
-        })
-        val headline = text("Browse with more control.", 22f, Color.WHITE, true)
-        headline.gravity = Gravity.CENTER
-        homePanel.addView(headline)
-        val intro = text(
-            "Your browser, your choice. StreamGurd blocks known ad and tracker domains and helps stop unwanted site redirects.",
-            13f, Color.rgb(164, 180, 207)
-        )
-        intro.gravity = Gravity.CENTER
-        intro.setLineSpacing(dp(3).toFloat(), 1f)
-        intro.setPadding(dp(4), dp(10), dp(4), dp(18))
-        homePanel.addView(intro)
-
+        val heroIcon = TextView(this).apply { text = "◈"; textSize = 34f; gravity = Gravity.CENTER; setTextColor(accent); background = GradientDrawable().apply { setColor(Color.rgb(35, 53, 83)); cornerRadius = dp(20).toFloat() } }
+        homePanel.addView(heroIcon, LinearLayout.LayoutParams(dp(62), dp(62)).apply { gravity = Gravity.CENTER; bottomMargin = dp(14) })
+        homePanel.addView(text("Browse with more control.", 21f, Color.WHITE, true).apply { gravity = Gravity.CENTER })
+        homePanel.addView(text("Your browser, your choice. StreamGurd blocks known ad and tracker domains and helps stop unwanted site redirects.", 12f, Color.rgb(164, 180, 207)).apply { gravity = Gravity.CENTER; setLineSpacing(dp(3).toFloat(), 1f); setPadding(dp(4), dp(9), dp(4), dp(16)) })
         val featureRow = LinearLayout(this).apply { gravity = Gravity.CENTER }
-        featureRow.addView(featureChip("◉  Tracker filter"), LinearLayout.LayoutParams(0, dp(36), 1f).apply { rightMargin = dp(4) })
-        featureRow.addView(featureChip("↗  Redirect guard"), LinearLayout.LayoutParams(0, dp(36), 1f).apply { leftMargin = dp(4) })
+        featureRow.addView(featureChip("◉ Tracker filter"), LinearLayout.LayoutParams(0, dp(34), 1f).apply { rightMargin = dp(4) })
+        featureRow.addView(featureChip("↗ Redirect guard"), LinearLayout.LayoutParams(0, dp(34), 1f).apply { leftMargin = dp(4) })
         homePanel.addView(featureRow)
-        homePanel.addView(actionButton("＋   OPEN A WEBSITE", true) { addLink() },
-            LinearLayout.LayoutParams(-1, dp(50)).apply { topMargin = dp(20) })
-        root.addView(homePanel, LinearLayout.LayoutParams(-1, 0, 1f))
+        homePanel.addView(actionButton("＋ OPEN A WEBSITE", true) { addLink() }, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(18) })
+        contentLayout.addView(homePanel, LinearLayout.LayoutParams(-1, 0, 1f))
 
         web = WebView(this)
-        root.addView(web, LinearLayout.LayoutParams(-1, 0, 1f))
-        browserBar = LinearLayout(this).apply {
-            gravity = Gravity.CENTER
-            setPadding(0, dp(8), 0, 0)
-        }
-        browserBar.addView(actionButton("‹  Back") { if (web.canGoBack()) web.goBack() },
-            LinearLayout.LayoutParams(0, dp(42), 1f).apply { rightMargin = dp(5) })
-        browserBar.addView(actionButton("Forward  ›") { if (web.canGoForward()) web.goForward() },
-            LinearLayout.LayoutParams(0, dp(42), 1f).apply { leftMargin = dp(5); rightMargin = dp(5) })
-        browserBar.addView(actionButton("↻  Reload") { web.reload() },
-            LinearLayout.LayoutParams(0, dp(42), 1f).apply { leftMargin = dp(5) })
-        root.addView(browserBar)
+        contentLayout.addView(web, LinearLayout.LayoutParams(-1, 0, 1f))
+        browserBar = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, dp(3), 0, 0); background = shape(Color.rgb(12, 19, 32), 12) }
+        browserBar.addView(actionButton("‹ Back") { if (web.canGoBack()) web.goBack() }, LinearLayout.LayoutParams(0, dp(34), 1f).apply { rightMargin = dp(3) })
+        browserBar.addView(actionButton("Forward ›") { if (web.canGoForward()) web.goForward() }, LinearLayout.LayoutParams(0, dp(34), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
+        browserBar.addView(actionButton("↻ Reload") { web.reload() }, LinearLayout.LayoutParams(0, dp(34), 1f).apply { leftMargin = dp(3) })
+        contentLayout.addView(browserBar, LinearLayout.LayoutParams(-1, dp(38)))
+
+        peekButton = actionButton("◉") { toggleBrowserChrome() }.apply { textSize = 18f; visibility = View.GONE; elevation = dp(8).toFloat() }
+        root.addView(peekButton, FrameLayout.LayoutParams(dp(42), dp(42), Gravity.END or Gravity.BOTTOM).apply { rightMargin = dp(10); bottomMargin = dp(10) })
         setContentView(root)
         web.visibility = View.GONE
         browserBar.visibility = View.GONE
         showHome()
-        // Keep the compact browser controls attached to the root for visibility changes.
-        web.tag = browserBar
     }
 
+    private fun toggleBrowserChrome() { setBrowserChromeVisible(!chromeVisible) }
+
+    private fun setBrowserChromeVisible(visible: Boolean) {
+        chromeVisible = visible
+        val v = if (visible) View.VISIBLE else View.GONE
+        headerBar.visibility = v; addressBar.visibility = v; actionRow.visibility = v; statusRow.visibility = v
+        browserBar.visibility = if (visible && web.visibility == View.VISIBLE) View.VISIBLE else View.GONE
+        peekButton.visibility = if (visible) View.GONE else View.VISIBLE
+    }
     private fun cachedCatalogue(): List<SiteEntry> {
         val raw = prefs.getString("catalogue_csv", "").orEmpty()
         return if (raw.isBlank()) emptyList() else parseCatalogue(raw)
@@ -491,32 +427,6 @@ class MainActivity : Activity() {
                 return false
             }
         }
-        web.setOnTouchListener { _, event ->
-            if (event.action == android.view.MotionEvent.ACTION_DOWN &&
-                (addressBar.visibility != View.VISIBLE || browserBar.visibility != View.VISIBLE)) {
-                addressBar.visibility = View.VISIBLE
-                browserBar.visibility = View.VISIBLE
-                mainHandler.removeCallbacks(hideChromeRunnable)
-                mainHandler.postDelayed(hideChromeRunnable, 3500L)
-            } else if (event.action == android.view.MotionEvent.ACTION_UP &&
-                addressBar.visibility == View.VISIBLE) {
-                mainHandler.removeCallbacks(hideChromeRunnable)
-                mainHandler.postDelayed(hideChromeRunnable, 3500L)
-            }
-            false
-        }
-        web.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
-            if (scrollY > oldScrollY + dp(3)) {
-                mainHandler.removeCallbacks(hideChromeRunnable)
-                addressBar.visibility = View.GONE
-                browserBar.visibility = View.GONE
-            } else if (scrollY < oldScrollY - dp(3)) {
-                addressBar.visibility = View.VISIBLE
-                browserBar.visibility = View.VISIBLE
-                mainHandler.removeCallbacks(hideChromeRunnable)
-                mainHandler.postDelayed(hideChromeRunnable, 3500L)
-            }
-        }
         web.webChromeClient = object : WebChromeClient() {
             override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?) = false
             override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
@@ -548,30 +458,20 @@ class MainActivity : Activity() {
     }
     private fun open(raw: String) {
         val value = normalized(raw)
-        if(value == null) { toast("Enter a valid website URL"); return }
+        if (value == null) { toast("Enter a valid website URL"); return }
         trustedHost = canonicalHost(hostOf(value))
         host = hostOf(value)
-        headerBar.visibility = View.GONE
-        actionRow.visibility = View.GONE
-        statusRow.visibility = View.GONE
         homePanel.visibility = View.GONE
-        addressBar.visibility = View.VISIBLE
         web.visibility = View.VISIBLE
-        browserBar.visibility = View.VISIBLE
         url.setText(value)
+        setBrowserChromeVisible(true)
         web.loadUrl(value)
-        mainHandler.removeCallbacks(hideChromeRunnable)
-        mainHandler.postDelayed(hideChromeRunnable, 3500L)
     }
     private fun showHome() {
-        mainHandler.removeCallbacks(hideChromeRunnable)
         web.visibility = View.GONE
-        browserBar.visibility = View.GONE
-        headerBar.visibility = View.VISIBLE
-        addressBar.visibility = View.VISIBLE
-        actionRow.visibility = View.VISIBLE
-        statusRow.visibility = View.VISIBLE
         homePanel.visibility = View.VISIBLE
+        setBrowserChromeVisible(true)
+        browserBar.visibility = View.GONE
     }
     private fun addLink() {
         val field = EditText(this).apply { hint = "https://example.com"; setTextColor(Color.WHITE); setHintTextColor(Color.GRAY); setSingleLine(true) }
@@ -629,7 +529,6 @@ class MainActivity : Activity() {
     }
     override fun onDestroy() {
         mainHandler.removeCallbacks(catalogueRefresh)
-        mainHandler.removeCallbacks(hideChromeRunnable)
         web.destroy()
         super.onDestroy()
     }
