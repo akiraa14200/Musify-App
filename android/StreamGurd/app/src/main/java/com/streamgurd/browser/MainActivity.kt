@@ -180,7 +180,7 @@ class MainActivity : Activity() {
                 textSize = 13f
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(16), 0, dp(12), 0)
-                background = glassShape(0x42FFFFFF, 15)
+                background = darkGlassShape(0x8A171A20.toInt(), 15)
             }, LinearLayout.LayoutParams(-1, dp(44)).apply { bottomMargin = dp(7) })
         }
         addFeature("＋  Add Website", ::addLink)
@@ -200,7 +200,7 @@ class MainActivity : Activity() {
             tag = "top-actions-panel"
             orientation = LinearLayout.VERTICAL
             setPadding(dp(7), dp(7), dp(7), dp(1))
-            background = glassShape(0x70FFFFFF, 22)
+            background = darkGlassShape(0xC0101218.toInt(), 22)
             elevation = dp(16).toFloat()
             visibility = View.GONE
         }
@@ -209,7 +209,7 @@ class MainActivity : Activity() {
             topActions.visibility = if (topActions.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }.apply {
             textSize = 21f
-            background = glassShape(0x66FFFFFF, 28)
+            background = darkGlassShape(0xD014171D.toInt(), 28)
             elevation = dp(18).toFloat()
         }
         root.addView(topActions, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply {
@@ -624,6 +624,19 @@ class MainActivity : Activity() {
             }
         }.show()
     }
+    // Dark translucent surfaces keep the feature drawer readable while retaining a glass-like finish.
+    private fun darkGlassShape(color: Int, radius: Int) = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
+        intArrayOf(
+            Color.argb(238, 30, 33, 40),
+            color,
+            Color.argb(220, 7, 9, 13)
+        )
+    ).apply {
+        cornerRadius = dp(radius).toFloat()
+        setStroke(dp(1), 0x77FFFFFF)
+    }
+
     private fun glassShape(color: Int, radius: Int) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
         intArrayOf(
