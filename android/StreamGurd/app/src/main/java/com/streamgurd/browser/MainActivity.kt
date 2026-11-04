@@ -484,98 +484,158 @@ class MainActivity : Activity() {
     }
 
     private fun showMusicPlayer() {
-        val panel = LinearLayout(this).apply {
+        val tracks = mutableListOf<MusicTrack>()
+        val dialogRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(14), dp(16), dp(14))
-            background = darkGlassShape(0xF0181B22.toInt(), 22)
+            setPadding(dp(14), dp(12), dp(14), dp(10))
+            background = darkGlassShape(0xF00A0A0C.toInt(), 24)
         }
-        panel.addView(text("STRAW HAT RADIO", 10f, Color.rgb(173, 190, 215), true))
-        panel.addView(text("Music for the voyage", 20f, Color.WHITE, true).apply { setPadding(0, dp(3), 0, dp(10)) })
+        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        header.addView(text("♫  MUSIC PLAYER", 17f, Color.WHITE, true))
+        header.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        val live = text("● READY", 10f, Color.rgb(170, 220, 210), true)
+        header.addView(live)
+        val close = actionButton("✕") { }
+        header.addView(close, LinearLayout.LayoutParams(dp(42), dp(38)).apply { leftMargin = dp(8) })
+        dialogRoot.addView(header)
+
         val searchRow = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
-            background = shape(Color.rgb(39, 44, 54), 14)
-            setPadding(dp(10), 0, dp(5), 0)
+            setPadding(dp(12), 0, dp(5), 0)
+            background = GradientDrawable().apply {
+                setColor(0x302A2A2A); cornerRadius = dp(28).toFloat()
+                setStroke(dp(1), 0x88FFFFFF.toInt())
+            }
         }
+        searchRow.addView(text("⌕", 25f, Color.WHITE), LinearLayout.LayoutParams(dp(34), dp(48)))
         val query = EditText(this).apply {
-            hint = "Songs, artists, albums…"; setSingleLine(true)
-            setTextColor(Color.WHITE); setHintTextColor(Color.LTGRAY)
-            textSize = 14f; background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+            hint = "Search songs, artists, albums…"; setSingleLine(true)
+            setTextColor(Color.WHITE); setHintTextColor(0xFFAAAAAA.toInt())
+            textSize = 15f; background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
         }
-        searchRow.addView(query, LinearLayout.LayoutParams(0, dp(48), 1f))
-        val tracks = mutableListOf<MusicTrack>()
-        val info = text("Search JioSaavn's catalogue", 11f, Color.LTGRAY).apply { setPadding(dp(2), dp(10), 0, dp(5)) }
+        searchRow.addView(query, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val clear = actionButton("×") { query.text.clear() }
+        searchRow.addView(clear, LinearLayout.LayoutParams(dp(38), dp(38)))
+        dialogRoot.addView(searchRow, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(12) })
+
+        val filterRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val filter = actionButton("ALL", true) {}
+        filterRow.addView(filter, LinearLayout.LayoutParams(dp(76), dp(36)).apply { rightMargin = dp(8) })
+        filterRow.addView(actionButton("SONGS", false) { }, LinearLayout.LayoutParams(dp(86), dp(36)))
+        filterRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        filterRow.addView(actionButton("↻", false) {
+            if (query.text.isNotBlank()) searchJioSaavn(query.text.toString(), tracks, adapterRef, infoRef)
+        }, LinearLayout.LayoutParams(dp(42), dp(36)))
+        dialogRoot.addView(filterRow, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(10) })
+
+        val info = text("Search JioSaavn for songs and artists", 11f, 0xFFB7B7B7.toInt()).apply {
+            setPadding(dp(3), dp(6), dp(3), dp(5))
+        }
+        val infoRef = info
         val list = ListView(this).apply {
-            divider = android.graphics.drawable.ColorDrawable(0x30FFFFFF.toInt())
+            divider = android.graphics.drawable.ColorDrawable(0x35FFFFFF)
             dividerHeight = dp(1); cacheColorHint = Color.TRANSPARENT
             background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+            isVerticalScrollBarEnabled = true
         }
-        val adapter = object : BaseAdapter() {
+        lateinit var adapter: BaseAdapter
+        val adapterRef = object : BaseAdapter() {
             override fun getCount() = tracks.size
             override fun getItem(position: Int) = tracks[position]
             override fun getItemId(position: Int) = tracks[position].id.hashCode().toLong()
             override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
                 val track = tracks[position]
                 val row = LinearLayout(this@MainActivity).apply {
-                    orientation = LinearLayout.VERTICAL; setPadding(dp(10), dp(9), dp(8), dp(9))
-                    background = if (currentMusic?.id == track.id) shape(0x553E526D, 10) else android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(4), dp(7), dp(5), dp(7))
+                    background = if (currentMusic?.id == track.id) shape(0x553FFFFFF, 13) else android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
                 }
-                row.addView(text(track.title, 13f, Color.WHITE, true))
-                row.addView(text(track.artist.ifBlank { "Unknown artist" } + if (track.album.isNotBlank()) "  ·  " + track.album else "", 10f, Color.rgb(181, 190, 204)))
+                val art = ImageView(this@MainActivity).apply {
+                    layoutParams = LinearLayout.LayoutParams(dp(62), dp(62))
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    background = shape(0xFF303034.toInt(), 12)
+                    setImageResource(android.R.drawable.ic_media_play)
+                    tag = track.image
+                }
+                if (track.image.isNotBlank()) Thread {
+                    try {
+                        val c = URL(track.image).openConnection() as HttpURLConnection
+                        c.connectTimeout = 6000; c.readTimeout = 8000
+                        val bitmap = try { c.inputStream.use { android.graphics.BitmapFactory.decodeStream(it) } } finally { c.disconnect() }
+                        if (bitmap != null) runOnUiThread { if (art.tag == track.image) art.setImageBitmap(bitmap) }
+                    } catch (_: Exception) { }
+                }.start()
+                row.addView(art)
+                val details = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, dp(5), 0)
+                }
+                details.addView(text(track.title, 14f, Color.WHITE, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
+                details.addView(text(track.artist.ifBlank { "Unknown artist" }, 11f, 0xFFB8B8B8.toInt()).apply { maxLines = 1 })
+                details.addView(text(track.album, 10f, 0xFF888888.toInt()).apply { maxLines = 1 })
+                row.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
+                row.addView(text(if (track.duration > 0) formatMusicTime(track.duration * 1000L) else "♫", 11f, 0xFFCCCCCC.toInt()))
+                row.addView(actionButton(if (currentMusic?.id == track.id && musicPlayer?.isPlaying == true) "Ⅱ" else "▶") {
+                    playJioSaavnTrack(track)
+                }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { leftMargin = dp(7) })
                 return row
             }
         }
+        adapter = adapterRef
         list.adapter = adapter
-        searchRow.addView(actionButton("SEARCH", true) {
-            searchJioSaavn(query.text.toString(), tracks, adapter, info)
-        }, LinearLayout.LayoutParams(dp(86), dp(38)))
-        panel.addView(searchRow)
-        panel.addView(info)
-        panel.addView(list, LinearLayout.LayoutParams(-1, dp(190)))
-        panel.addView(View(this).apply {
-            setBackgroundColor(0x44FFFFFF)
-            layoutParams = LinearLayout.LayoutParams(-1, dp(1)).apply { topMargin = dp(8); bottomMargin = dp(10) }
-        })
-        val now = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        dialogRoot.addView(info)
+        dialogRoot.addView(list, LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(8) })
+
+        val mini = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(9), dp(10), dp(9))
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                intArrayOf(0xDD55565A.toInt(), 0xEE161719.toInt(), 0xF008090A.toInt())).apply {
+                cornerRadius = dp(25).toFloat()
+                setStroke(dp(1), 0x99FFFFFF.toInt())
+            }
+        }
         val cover = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            background = shape(Color.rgb(47, 55, 68), 14)
+            background = shape(0xFF343438.toInt(), 15)
             setImageResource(android.R.drawable.ic_media_play)
         }
-        now.addView(cover, LinearLayout.LayoutParams(dp(62), dp(62)))
-        val nowText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, 0, 0) }
-        nowText.addView(text("NOW PLAYING", 9f, Color.rgb(173, 190, 215), true))
-        val statusText = text("Choose a track to begin", 12f, Color.WHITE, true).apply { maxLines = 2 }
+        mini.addView(cover, LinearLayout.LayoutParams(dp(76), dp(76)))
+        val nowText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, dp(6), 0) }
+        nowText.addView(text("NOW PLAYING", 9f, 0xFFD0D0D0.toInt(), true))
+        val statusText = text(currentMusic?.title ?: "Choose a song", 13f, Color.WHITE, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
         musicStatus = statusText
         nowText.addView(statusText)
-        now.addView(nowText, LinearLayout.LayoutParams(0, -2, 1f))
-        panel.addView(now)
-        val seek = SeekBar(this).apply { max = 1000; progress = 0 }
-        panel.addView(seek, LinearLayout.LayoutParams(-1, dp(28)).apply { topMargin = dp(5) })
-        val timeRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        val elapsed = text("0:00", 10f, Color.LTGRAY)
-        val total = text("0:00", 10f, Color.LTGRAY)
-        timeRow.addView(elapsed); timeRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f)); timeRow.addView(total)
-        panel.addView(timeRow)
-        val controls = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, dp(9), 0, 0) }
-        controls.addView(actionButton("Ⅱ", false) { toggleMusicPlayback() }, LinearLayout.LayoutParams(dp(54), dp(44)).apply { rightMargin = dp(8) })
-        val play = actionButton("▶  PLAY", true) { toggleMusicPlayback() }
+        val artistText = text(currentMusic?.artist ?: "JioSaavn", 10f, 0xFFBBBBBB.toInt()).apply { maxLines = 1 }
+        nowText.addView(artistText)
+        mini.addView(nowText, LinearLayout.LayoutParams(0, -2, 1f))
+        val play = actionButton(if (musicPlayer?.isPlaying == true) "Ⅱ" else "▶") { toggleMusicPlayback() }
         musicPlayButton = play
-        controls.addView(play, LinearLayout.LayoutParams(0, dp(44), 1f))
-        controls.addView(actionButton("■", false) { stopMusic() }, LinearLayout.LayoutParams(dp(54), dp(44)).apply { leftMargin = dp(8) })
-        panel.addView(controls)
-        val dialog = AlertDialog.Builder(this).setView(panel).setNegativeButton("CLOSE", null).create()
+        mini.addView(play, LinearLayout.LayoutParams(dp(48), dp(48)))
+        mini.addView(actionButton("■") { stopMusic() }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { leftMargin = dp(5) })
+        dialogRoot.addView(mini, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
+
+        val seek = SeekBar(this).apply { max = 1000; progress = 0 }
+        dialogRoot.addView(seek, LinearLayout.LayoutParams(-1, dp(22)))
+        val timeRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val elapsed = text("0:00", 9f, Color.LTGRAY)
+        val total = text("0:00", 9f, Color.LTGRAY)
+        timeRow.addView(elapsed); timeRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f)); timeRow.addView(total)
+        dialogRoot.addView(timeRow)
+
+        val dialog = AlertDialog.Builder(this).setView(dialogRoot).create()
+        close.setOnClickListener { dialog.dismiss() }
         list.setOnItemClickListener { _, _, position, _ -> playJioSaavnTrack(tracks[position]) }
         query.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH || actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
                 searchJioSaavn(query.text.toString(), tracks, adapter, info); true
             } else false
         }
-        dialog.setOnDismissListener { musicStatus = null; musicPlayButton = null }
-        dialog.setOnShowListener { dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(Color.LTGRAY) }
+        dialog.setOnDismissListener { musicStatus = null; musicPlayButton = null; musicCoverView = null; musicSeekBar = null; musicElapsedView = null; musicDurationView = null }
         dialog.show()
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.92f).toInt(), -2)
+        dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.97f).toInt(), (resources.displayMetrics.heightPixels * 0.90f).toInt())
         musicCoverView = cover; musicSeekBar = seek
         musicElapsedView = elapsed; musicDurationView = total
         musicResultsAdapter = adapter
