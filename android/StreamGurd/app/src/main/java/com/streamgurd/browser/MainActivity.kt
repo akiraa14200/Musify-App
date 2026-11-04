@@ -853,6 +853,7 @@ class MainActivity : Activity() {
             if (event.actionMasked == MotionEvent.ACTION_UP) lastUserTouchAt = SystemClock.elapsedRealtime()
             false
         }
+        val redirectCallbacksSupported = WebViewFeature.isFeatureSupported(WebViewFeature.SHOULD_OVERRIDE_WITH_REDIRECTS)
         val redirectFlagSupported = WebViewFeature.isFeatureSupported(WebViewFeature.WEB_RESOURCE_REQUEST_IS_REDIRECT)
         web.webViewClient = object : WebViewClientCompat() {
             // No request filtering: site scripts, images, video streams and CDNs remain untouched.
@@ -865,7 +866,7 @@ class MainActivity : Activity() {
             }
             override fun onPageFinished(view: WebView?, page: String?) {
                 page?.let { prefs.edit().putString("last_url",it).apply(); saveHistory(it) }
-                status.text = if(blocking) "REDIRECT PROTECTION ON · $host" else "REDIRECT PROTECTION OFF · $host"
+                status.text = if (!blocking) "REDIRECT PROTECTION OFF · $host" else if (redirectCallbacksSupported) "REDIRECT PROTECTION ON · $host" else "REDIRECT PROTECTION LIMITED · UPDATE WEBVIEW"
             }
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val uri = request.url
