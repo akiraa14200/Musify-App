@@ -789,7 +789,113 @@ class MainActivity : Activity() {
         }.start()
     }
 
-${piped}    private fun playJioSaavnTrack(track: MusicTrack) {
+    private val pipedApiInstances = listOf(
+        "https://pipedapi.adminforge.de",
+        "https://pipedapi.kavin.rocks",
+        "https://pipedapi.in.projectsegfau.lt"
+    )
+
+    private fun pipedRequest(path: String): org.json.JSONObject {
+        var lastError: Exception? = null
+        for (base in pipedApiInstances) {
+            var connection: HttpURLConnection? = null
+            try {
+                connection = (URL(base + path).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 7000
+                    readTimeout = 12000
+                    requestMethod = "GET"
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("User-Agent", "StrawhatPirate/1.1 (Android)")
+                }
+                val code = connection.responseCode
+                if (code !in 200..299) throw IllegalStateException("Piped HTTP $code")
+                val body = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                return org.json.JSONObject(body)
+            } catch (e: Exception) {
+                lastError = e
+            } finally {
+                connection?.disconnect()
+            }
+        }
+        throw IllegalStateException("YouTube music service is temporarily unavailable", lastError)
+    }
+
+    private fun searchPipedMusic(raw: String, tracks: MutableList<MusicTrack>, adapter: BaseAdapter, info: TextView) {
+        val query = raw.trim()
+        if (query.isEmpty()) return
+        val requestId = ++musicSearchRequest
+        musicSearchInFlight = true
+        info.text = "Searching YouTube music…"
+        Thread {
+            try {
+                val path = "/search?q=" + java.net.URLEncoder.encode(query, "UTF-8") + "&filter=music_songs"
+                val response = pipedRequest(path)
+                val items = response.optJSONArray("items") ?: org.json.JSONArray()
+                val found = mutableListOf<MusicTrack>()
+                val seen = HashSet<String>()
+                for (i in 0 until minOf(items.length(), 50)) {
+                    val item = items.optJSONObject(i) ?: continue
+                    val watchUrl = item.optString("url")
+                    val id = Regex("(?:v=|/watch/)([A-Za-z0-9_-]{6,})").find(watchUrl)?.groupValues?.getOrNull(1)
+                        ?: item.optString("id").takeIf { it.isNotBlank() } ?: continue
+                    val title = item.optString("title").trim()
+                    if (title.isBlank() || !seen.add(id)) continue
+                    val artist = item.optString("uploaderName").ifBlank { item.optString("uploader") }
+                    val thumbnail = item.optString("thumbnail")
+                    val duration = item.optInt("duration", 0)
+                    found.add(MusicTrack("yt:$id", title, artist, "YouTube", duration, "", thumbnail))
+                }
+                runOnUiThread {
+                    if (requestId != musicSearchRequest) return@runOnUiThread
+                    musicSearchInFlight = false
+                    tracks.clear()
+                    tracks.addAll(found)
+                    adapter.notifyDataSetChanged()
+                    info.text = if (found.isEmpty()) "No YouTube music results. Try another search." else "${found.size} YouTube music results"
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    if (requestId != musicSearchRequest) return@runOnUiThread
+                    musicSearchInFlight = false
+                    info.text = "YouTube music search unavailable. Try again or switch to Saavn."
+                }
+            }
+        }.start()
+    }
+
+    private fun playPipedMusicTrack(track: MusicTrack) {
+        val videoId = track.id.removePrefix("yt:")
+        musicStatus?.text = "Resolving YouTube audio…"
+        musicPlayButton?.text = "LOADING…"
+        Thread {
+            try {
+                val response = pipedRequest("/streams/" + java.net.URLEncoder.encode(videoId, "UTF-8"))
+                val streams = response.optJSONArray("audioStreams") ?: org.json.JSONArray()
+                var bestUrl = ""
+                var bestBitrate = -1
+                for (i in 0 until streams.length()) {
+                    val stream = streams.optJSONObject(i) ?: continue
+                    val url = stream.optString("url")
+                    val mime = stream.optString("mimeType")
+                    val bitrate = stream.optInt("bitrate", 0)
+                    if (url.startsWith("https://") && mime.contains("audio", true) && bitrate > bestBitrate) {
+                        bestUrl = url
+                        bestBitrate = bitrate
+                    }
+                }
+                if (bestUrl.isBlank()) throw IllegalStateException("No audio stream available")
+                val resolved = track.copy(stream = bestUrl)
+                runOnUiThread { playResolvedMusicTrack(resolved) }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    musicStatus?.text = "Couldn't load this YouTube stream. Try another result."
+                    musicPlayButton?.text = "▶  RETRY"
+                }
+            }
+        }.start()
+    }
+
+    private fun playJioSaavnTrack(track: MusicTrack) {
         if (track.id.startsWith("yt:")) {
             playPipedMusicTrack(track)
             return
