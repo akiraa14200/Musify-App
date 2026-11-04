@@ -21,7 +21,7 @@ import java.net.URL
 import java.util.Locale
 
 class MainActivity : Activity() {
-    private data class SiteEntry(val name: String, val url: String)
+    private data class SiteEntry(val name: String, val url: String, val category: String)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val catalogueRefresh = object : Runnable {
         override fun run() {
@@ -29,7 +29,8 @@ class MainActivity : Activity() {
             mainHandler.postDelayed(this, 15 * 60 * 1000L)
         }
     }
-    private val catalogueCsvUrl = "https://docs.google.com/spreadsheets/d/1VLCJE_YxSQlPbjQojaFTy1ZzrmpitetsAXDgTUpbHzs/export?format=csv"
+    private val animeCatalogueCsvUrl = "https://docs.google.com/spreadsheets/d/1VLCJE_YxSQlPbjQojaFTy1ZzrmpitetsAXDgTUpbHzs/export?format=csv"
+    private val mangaCatalogueCsvUrl = "https://docs.google.com/spreadsheets/d/1VLCJE_YxSQlPbjQojaFTy1ZzrmpitetsAXDgTUpbHzs/gviz/tq?tqx=out:csv&sheet=Sheet2"
     private lateinit var root: FrameLayout
     private lateinit var contentLayout: LinearLayout
     private lateinit var peekButton: TextView
@@ -198,45 +199,56 @@ class MainActivity : Activity() {
         browserBar.visibility = if (visible && web.visibility == View.VISIBLE) View.VISIBLE else View.GONE
         peekButton.visibility = if (visible) View.GONE else View.VISIBLE
     }
-    private fun cachedCatalogue(): List<SiteEntry> {
-        val raw = prefs.getString("catalogue_csv", "").orEmpty()
-        return if (raw.isBlank()) emptyList() else parseCatalogue(raw)
+    private fun cachedCatalogue(category: String): List<SiteEntry> {
+        val key = if (category == "Manga") "catalogue_manga_csv" else "catalogue_anime_csv"
+        val csv = prefs.getString(key, "").orEmpty()
+        return if (csv.isBlank()) emptyList() else parseCatalogue(csv, category)
+    }
+
+    private fun downloadCatalogueCsv(endpoint: String): String {
+        var connection: HttpURLConnection? = null
+        try {
+            connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"; connectTimeout = 12000; readTimeout = 15000
+                instanceFollowRedirects = true
+                setRequestProperty("User-Agent", "StreamGurd Android")
+                setRequestProperty("Accept", "text/csv,text/plain,*/*")
+            }
+            if (connection.responseCode !in 200..299) throw IllegalStateException("HTTP ${connection.responseCode}")
+            return connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        } finally { connection?.disconnect() }
     }
 
     private fun refreshCatalogue(showMessage: Boolean) {
         Thread {
-            var connection: HttpURLConnection? = null
+            var anime = 0
+            var manga = 0
             try {
-                connection = (URL(catalogueCsvUrl).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    connectTimeout = 12000
-                    readTimeout = 15000
-                    instanceFollowRedirects = true
-                    setRequestProperty("User-Agent", "StreamGurd Android")
-                    setRequestProperty("Accept", "text/csv,text/plain,*/*")
+                val csv = downloadCatalogueCsv(animeCatalogueCsvUrl)
+                val rows = parseCatalogue(csv, "Anime")
+                if (rows.isNotEmpty()) {
+                    prefs.edit().putString("catalogue_anime_csv", csv).putLong("catalogue_anime_updated_at", System.currentTimeMillis()).apply()
+                    anime = rows.size
                 }
-                if (connection.responseCode !in 200..299) {
-                    throw IllegalStateException("HTTP ${connection.responseCode}")
+            } catch (_: Exception) { }
+            try {
+                val csv = downloadCatalogueCsv(mangaCatalogueCsvUrl)
+                val rows = parseCatalogue(csv, "Manga")
+                if (rows.isNotEmpty()) {
+                    prefs.edit().putString("catalogue_manga_csv", csv).putLong("catalogue_manga_updated_at", System.currentTimeMillis()).apply()
+                    manga = rows.size
                 }
-                val csv = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                val entries = parseCatalogue(csv)
-                if (entries.isEmpty()) throw IllegalStateException("No valid Site Name / Site URL rows found")
-                prefs.edit().putString("catalogue_csv", csv)
-                    .putLong("catalogue_updated_at", System.currentTimeMillis()).apply()
-                runOnUiThread {
-                    if (showMessage) toast("Site catalogue updated · ${entries.size} sites")
+            } catch (_: Exception) { }
+            runOnUiThread {
+                if (showMessage) {
+                    if (anime + manga > 0) toast("Catalogue refreshed · Anime: $anime · Manga: $manga")
+                    else toast("Refresh failed. Showing saved catalogue.")
                 }
-            } catch (e: Exception) {
-                runOnUiThread {
-                    if (showMessage) toast("Could not refresh catalogue. Showing saved sites.")
-                }
-            } finally {
-                connection?.disconnect()
             }
         }.start()
     }
 
-    private fun parseCatalogue(csv: String): List<SiteEntry> {
+    private fun parseCatalogue(csv: String, category: String): List<SiteEntry> {
         val rows = mutableListOf<List<String>>()
         val row = mutableListOf<String>()
         val cell = StringBuilder()
@@ -270,70 +282,67 @@ class MainActivity : Activity() {
         return rows.drop(1).mapNotNull { cells ->
             val name = cells.getOrNull(nameIndex)?.trim().orEmpty()
             val siteUrl = normalized(cells.getOrNull(urlIndex).orEmpty()) ?: return@mapNotNull null
-            if (name.isBlank()) null else SiteEntry(name, siteUrl)
+            if (name.isBlank()) null else SiteEntry(name, siteUrl, category)
         }.distinctBy { it.url }
     }
 
     private fun showCatalogue() {
-        val entries = cachedCatalogue()
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(8), dp(18), dp(4))
-        }
+        var category = "Anime"
+        var entries = cachedCatalogue(category)
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(8), dp(18), dp(4)) }
+        val tabs = LinearLayout(this).apply { gravity = Gravity.CENTER }
+        val animeTab = actionButton("Anime", true) {}
+        val mangaTab = actionButton("Manga") {}
+        tabs.addView(animeTab, LinearLayout.LayoutParams(0, dp(38), 1f).apply { rightMargin = dp(4) })
+        tabs.addView(mangaTab, LinearLayout.LayoutParams(0, dp(38), 1f).apply { leftMargin = dp(4) })
         val search = EditText(this).apply {
-            hint = "Search sites"
-            setSingleLine(true)
-            setTextColor(Color.WHITE)
-            setHintTextColor(Color.GRAY)
-            background = shape(Color.rgb(35, 45, 64), 12)
-            setPadding(dp(12), 0, dp(12), 0)
+            hint = "Search sites"; setSingleLine(true); setTextColor(Color.WHITE); setHintTextColor(Color.GRAY)
+            background = shape(Color.rgb(35,45,64),12); setPadding(dp(12),0,dp(12),0)
         }
-        val info = text(
-            if (entries.isEmpty()) "No saved catalogue yet. Connect to the internet and refresh."
-            else "${entries.size} sites · Updates automatically while the app is open",
-            11f, Color.LTGRAY
-        )
-        info.setPadding(dp(2), dp(8), dp(2), dp(8))
-        val listView = ListView(this)
+        val info = text("",11f,Color.LTGRAY).apply { setPadding(dp(2),dp(8),dp(2),dp(8)) }
+        val list = ListView(this)
         val filtered = entries.toMutableList()
-        val adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1,
-            filtered.map { it.name }.toMutableList())
-        listView.adapter = adapter
-        container.addView(search, LinearLayout.LayoutParams(-1, dp(48)))
-        container.addView(info)
-        container.addView(listView, LinearLayout.LayoutParams(-1, dp(360)))
-        val dialog = AlertDialog.Builder(this).setTitle("Site Catalogue")
-            .setView(container)
-            .setNegativeButton("Close", null)
-            .setPositiveButton("Refresh", null)
-            .create()
-        listView.setOnItemClickListener { _, _, position, _ ->
-            val selected = filtered.getOrNull(position) ?: return@setOnItemClickListener
-            dialog.dismiss()
-            open(selected.url)
+        val adapter = ArrayAdapter(this,android.R.layout.simple_list_item_1,filtered.map { it.name }.toMutableList())
+        list.adapter = adapter
+        box.addView(tabs,LinearLayout.LayoutParams(-1,dp(40)))
+        box.addView(search,LinearLayout.LayoutParams(-1,dp(46)).apply { topMargin=dp(6) })
+        box.addView(info)
+        box.addView(list,LinearLayout.LayoutParams(-1,dp(330)))
+        fun render(which: String) {
+            category=which
+            entries=cachedCatalogue(which)
+            val q=search.text.toString().trim()
+            val matches=entries.filter { it.name.contains(q,true)||it.url.contains(q,true) }
+            filtered.clear(); filtered.addAll(matches)
+            adapter.clear(); adapter.addAll(matches.map { it.name })
+            animeTab.background=shape(if(which=="Anime") Color.rgb(174,199,246) else Color.rgb(22,32,51),14)
+            mangaTab.background=shape(if(which=="Manga") Color.rgb(174,199,246) else Color.rgb(22,32,51),14)
+            animeTab.setTextColor(if(which=="Anime") Color.rgb(10,17,31) else Color.rgb(215,226,245))
+            mangaTab.setTextColor(if(which=="Manga") Color.rgb(10,17,31) else Color.rgb(215,226,245))
+            info.text=if(entries.isEmpty()) "$which sheet is empty or unavailable" else "${matches.size} of ${entries.size} $which sites"
         }
-        search.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                val query = s?.toString().orEmpty().trim()
-                val matches = entries.filter { it.name.contains(query, true) || it.url.contains(query, true) }
-                filtered.clear(); filtered.addAll(matches)
-                adapter.clear(); adapter.addAll(matches.map { it.name })
-                info.text = "${matches.size} of ${entries.size} sites"
-            }
-            override fun afterTextChanged(s: android.text.Editable?) {}
+        animeTab.setOnClickListener { render("Anime") }
+        mangaTab.setOnClickListener { render("Manga") }
+        val dialog=AlertDialog.Builder(this).setTitle("Site Catalogue").setView(box).setNegativeButton("Close",null).setPositiveButton("Refresh",null).create()
+        list.setOnItemClickListener { _,_,position,_ ->
+            val item=filtered.getOrNull(position) ?: return@setOnItemClickListener
+            dialog.dismiss(); open(item.url)
+        }
+        search.addTextChangedListener(object: android.text.TextWatcher {
+            override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int) {}
+            override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int) { render(category) }
+            override fun afterTextChanged(s:android.text.Editable?) {}
         })
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                refreshCatalogue(true)
-                toast("Refreshing site catalogue…")
+                refreshCatalogue(true); toast("Refreshing Anime and Manga sheets…")
             }
         }
         dialog.show()
-        // Apply the button styling after show() creates the buttons.
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Color.rgb(120, 160, 230))
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Color.rgb(120,160,230))
         dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(Color.LTGRAY)
-        if (entries.isEmpty()) refreshCatalogue(false)
+        render("Anime")
+        if(cachedCatalogue("Anime").isEmpty() || cachedCatalogue("Manga").isEmpty()) refreshCatalogue(false)
     }
 
     private fun featureChip(label: String) = TextView(this).apply {
