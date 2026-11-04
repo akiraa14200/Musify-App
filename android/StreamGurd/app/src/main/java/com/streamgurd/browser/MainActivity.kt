@@ -94,8 +94,8 @@ class MainActivity : Activity() {
 
         root = FrameLayout(this).apply { setBackgroundColor(bg) }
         root.setOnApplyWindowInsetsListener { _, insets ->
-            val top: Int
-            val bottom: Int
+            var top = 0
+            var bottom = 0
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
                 val bars = insets.getInsets(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
                 top = bars.top; bottom = bars.bottom
@@ -374,9 +374,9 @@ class MainActivity : Activity() {
         typeface = Typeface.DEFAULT_BOLD
         setTextColor(if (prominent) Color.rgb(10, 17, 31) else Color.rgb(215, 226, 245))
         background = GradientDrawable().apply {
-            setColor(if (prominent) Color.rgb(174, 199, 246) else Color.rgb(22, 32, 51))
+            setColor(if (prominent) Color.rgb(174, 199, 246) else 0xB82A3B55.toInt())
             cornerRadius = dp(14).toFloat()
-            setStroke(dp(1), if (prominent) Color.rgb(198, 216, 255) else Color.rgb(42, 57, 82))
+            setStroke(dp(1), if (prominent) Color.rgb(198, 216, 255) else 0x667F9FC8)
         }
         setOnClickListener { click() }
     }
@@ -543,7 +543,11 @@ class MainActivity : Activity() {
     private fun exitFullscreen() {
         fullView?.let { (it.parent as? ViewGroup)?.removeView(it) }
         fullView = null; fullCallback?.onCustomViewHidden(); fullCallback = null
-        root.visibility = View.VISIBLE; window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+        root.visibility = View.VISIBLE
+        if (android.os.Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false) else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+        }
     }
     private fun toast(message: String) = Toast.makeText(this,message,Toast.LENGTH_SHORT).show()
     @Deprecated("Deprecated in Android")
