@@ -64,8 +64,9 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         blocking = prefs.getBoolean("blocking", true)
-        applyBrowserSystemBars()
+        // Create the root view before attaching its system-insets listener.
         buildUi()
+        applyBrowserSystemBars()
         configureWeb()
         prefs.getString("last_url", null)?.let { open(it) }
     }
