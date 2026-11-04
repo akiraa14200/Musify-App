@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
@@ -211,9 +212,55 @@ class MainActivity : Activity() {
             topMargin = dp(66); rightMargin = dp(12)
         })
         topActionsToggle.tag = "top-actions-toggle"
-        root.addView(topActionsToggle, FrameLayout.LayoutParams(dp(46), dp(46), Gravity.TOP or Gravity.END).apply {
-            topMargin = dp(9); rightMargin = dp(12)
-        })
+        val floatingParams = FrameLayout.LayoutParams(dp(46), dp(46), Gravity.TOP or Gravity.START).apply {
+            leftMargin = prefs.getInt("menu_x", dp(12)).coerceAtLeast(0)
+            topMargin = prefs.getInt("menu_y", dp(72)).coerceAtLeast(0)
+        }
+        root.addView(topActionsToggle, floatingParams)
+        var downRawX = 0f
+        var downRawY = 0f
+        var startLeft = 0
+        var startTop = 0
+        var dragged = false
+        topActionsToggle.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downRawX = event.rawX; downRawY = event.rawY
+                    val lp = view.layoutParams as FrameLayout.LayoutParams
+                    startLeft = lp.leftMargin; startTop = lp.topMargin
+                    dragged = false
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = (event.rawX - downRawX).toInt()
+                    val dy = (event.rawY - downRawY).toInt()
+                    if (kotlin.math.abs(dx) > dp(5) || kotlin.math.abs(dy) > dp(5)) dragged = true
+                    if (dragged) {
+                        val lp = view.layoutParams as FrameLayout.LayoutParams
+                        lp.gravity = Gravity.TOP or Gravity.START
+                        lp.leftMargin = (startLeft + dx).coerceIn(0, (root.width - view.width).coerceAtLeast(0))
+                        lp.topMargin = (startTop + dy).coerceIn(0, (root.height - view.height).coerceAtLeast(0))
+                        view.layoutParams = lp
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (dragged) {
+                        val lp = view.layoutParams as FrameLayout.LayoutParams
+                        prefs.edit().putInt("menu_x", lp.leftMargin).putInt("menu_y", lp.topMargin).apply()
+                    } else {
+                        topActions.visibility = if (topActions.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                    }
+                    view.performClick()
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> true
+                else -> true
+            }
+        }
+        topActionsToggle.setOnClickListener {
+            topActions.visibility = if (topActions.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        }
 
         statusRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(3), 0, dp(3), dp(2)) }
         val statusDot = View(this).apply { background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.rgb(104, 215, 163)) } }
@@ -234,7 +281,10 @@ class MainActivity : Activity() {
         featureRow.addView(featureChip("◉ Tracker filter"), LinearLayout.LayoutParams(0, dp(34), 1f).apply { rightMargin = dp(4) })
         featureRow.addView(featureChip("↗ Redirect guard"), LinearLayout.LayoutParams(0, dp(34), 1f).apply { leftMargin = dp(4) })
         homePanel.addView(featureRow)
-        homePanel.addView(actionButton("＋ OPEN A WEBSITE", true) { addLink() }, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(18) })
+        val entryActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        entryActions.addView(actionButton("＋ ADD WEBSITE", true) { addLink() }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(5) })
+        entryActions.addView(actionButton("☷ SITE CATALOGUE", false) { showCatalogue() }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(5) })
+        homePanel.addView(entryActions, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(18) })
         contentLayout.addView(homePanel, LinearLayout.LayoutParams(-1, 0, 1f))
 
         web = WebView(this)
