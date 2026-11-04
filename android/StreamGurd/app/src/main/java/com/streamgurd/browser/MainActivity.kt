@@ -21,9 +21,6 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 import android.os.SystemClock
-import androidx.webkit.WebResourceRequestCompat
-import androidx.webkit.WebViewClientCompat
-import androidx.webkit.WebViewFeature
 
 class MainActivity : Activity() {
     private data class SiteEntry(val name: String, val url: String, val category: String)
@@ -853,42 +850,36 @@ class MainActivity : Activity() {
             if (event.actionMasked == MotionEvent.ACTION_UP) lastUserTouchAt = SystemClock.elapsedRealtime()
             false
         }
-        val redirectCallbacksSupported = WebViewFeature.isFeatureSupported(WebViewFeature.SHOULD_OVERRIDE_WITH_REDIRECTS)
-        val redirectFlagSupported = WebViewFeature.isFeatureSupported(WebViewFeature.WEB_RESOURCE_REQUEST_IS_REDIRECT)
-        web.webViewClient = object : WebViewClientCompat() {
-            // Filter known ad/redirect hosts at the request layer. Returning an empty
-            // 204 response keeps blocked resources from replacing the visible document.
+        web.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                 val uri = request?.url ?: return null
-                val destination = uri.host?.lowercase(Locale.ROOT) ?: return null
-                return if (blocking && isBlockedHost(destination)) blockedResponse()
-                    else super.shouldInterceptRequest(view, request)
+                val h = uri.host?.lowercase(Locale.ROOT) ?: return null
+                val sameSite = isTrustedSiteHost(h)
+                val denied = blocking && !sameSite && blocked.any { h == it || h.endsWith(".$it") }
+                return if(denied) WebResourceResponse("text/plain","utf-8",204,"Blocked", emptyMap(),java.io.ByteArrayInputStream(ByteArray(0)))
+                    else super.shouldInterceptRequest(view,request)
             }
-
             override fun onPageStarted(view: WebView?, page: String?, favicon: android.graphics.Bitmap?) {
                 page?.let { url.setText(it); host = hostOf(it); status.text = "LOADING · $host" }
-                if (blocking) installPopupGuard()
             }
-
-            override fun onPageCommitVisible(view: WebView?, page: String?) {
-                if (blocking) installPopupGuard()
-            }
-
             override fun onPageFinished(view: WebView?, page: String?) {
-                page?.let { prefs.edit().putString("last_url", it).apply(); saveHistory(it) }
-                status.text = if (blocking) "PROTECTION ACTIVE · $host" else "PROTECTION PAUSED · $host"
+                page?.let { prefs.edit().putString("last_url",it).apply(); saveHistory(it) }
+                status.text = if(blocking) "PROTECTION ACTIVE · $host" else "PROTECTION PAUSED · $host"
             }
-
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                val uri = request.url
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                val uri = request?.url ?: return true
                 val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return true
                 if (scheme !in listOf("http", "https")) return true
-                if (!request.isForMainFrame || !blocking) return false
 
-                val destination = uri.host?.lowercase(Locale.ROOT) ?: return true
-                if (isBlockedHost(destination) || !isTrustedSiteHost(destination)) {
-                    status.text = "BLOCKED REDIRECT · $destination"
-                    return true
+                // Only guard top-level page changes. Embedded players, images, scripts,
+                // and other subframe resources remain available unless their host is blocked.
+                if (request.isForMainFrame) {
+                    val destination = uri.host?.lowercase(Locale.ROOT) ?: return true
+                    val isKnownAdHost = blocked.any { destination == it || destination.endsWith(".$it") }
+                    if (isKnownAdHost || !isTrustedSiteHost(destination)) {
+                        status.text = "BLOCKED REDIRECT · $destination"
+                        return true
+                    }
                 }
                 return false
             }
@@ -898,9 +889,9 @@ class MainActivity : Activity() {
                 val uri = try { URI(url ?: return true) } catch (_: Exception) { return true }
                 val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return true
                 if (scheme !in listOf("http", "https")) return true
-                if (!blocking) return false
                 val destination = uri.host?.lowercase(Locale.ROOT) ?: return true
-                if (isBlockedHost(destination) || !isTrustedSiteHost(destination)) {
+                val isKnownAdHost = blocked.any { destination == it || destination.endsWith(".$it") }
+                if (isKnownAdHost || !isTrustedSiteHost(destination)) {
                     status.text = "BLOCKED REDIRECT · $destination"
                     return true
                 }
@@ -920,35 +911,7 @@ class MainActivity : Activity() {
         }
     }
 
-    // Block only script-created pop-up windows. Do not intercept page clicks,
-    // anchor events or form submissions: streaming/catalogue sites rely on them.
-    @SuppressLint("JavascriptInterface")
-    private fun installPopupGuard() {
-        if (!blocking || !::web.isInitialized) return
-        val script = """
-            (function() {
-              if (window.__strawhatPopupGuard) return;
-              window.__strawhatPopupGuard = true;
-              try {
-                window.open = function() { return null; };
-                window.showModalDialog = function() { return null; };
-              } catch (_) {}
-            })();
-        """.trimIndent()
-        web.evaluateJavascript(script, null)
-    }
-
     private fun hostOf(value: String) = try { URI(value).host?.lowercase(Locale.ROOT) ?: "" } catch (_: Exception) { "" }
-
-    private fun isBlockedHost(value: String): Boolean {
-        val h = canonicalHost(value)
-        return blocked.any { h == it || h.endsWith(".$it") }
-    }
-
-    private fun blockedResponse() = WebResourceResponse(
-        "text/plain", "utf-8", 204, "Blocked", emptyMap(),
-        java.io.ByteArrayInputStream(ByteArray(0))
-    )
 
     private fun canonicalHost(value: String): String =
         value.lowercase(Locale.ROOT).removePrefix("www.")
