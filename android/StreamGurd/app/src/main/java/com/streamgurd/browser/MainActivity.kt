@@ -889,7 +889,8 @@ class MainActivity : Activity() {
         }
     }
 
-    // Prevent pop-up windows and new-tab launches without filtering site resources.
+    // Block only script-created pop-up windows. Do not intercept page clicks,
+    // anchor events or form submissions: streaming/catalogue sites rely on them.
     @SuppressLint("JavascriptInterface")
     private fun installPopupGuard() {
         if (!blocking || !::web.isInitialized) return
@@ -898,25 +899,8 @@ class MainActivity : Activity() {
               if (window.__strawhatPopupGuard) return;
               window.__strawhatPopupGuard = true;
               try {
-                const nativeOpen = window.open;
-                window.open = function(url) { return null; };
+                window.open = function() { return null; };
                 window.showModalDialog = function() { return null; };
-                document.addEventListener('click', function(e) {
-                  let a = e.target;
-                  while (a && a.tagName !== 'A') a = a.parentElement;
-                  if (!a) return;
-                  const target = (a.getAttribute('target') || '').toLowerCase();
-                  const href = a.href || '';
-                  if (target === '_blank' || target === '_new') {
-                    e.preventDefault(); e.stopImmediatePropagation();
-                  }
-                }, true);
-                document.addEventListener('submit', function(e) {
-                  const form = e.target;
-                  if (form && form.target && form.target !== '_self') {
-                    e.preventDefault(); e.stopImmediatePropagation();
-                  }
-                }, true);
               } catch (_) {}
             })();
         """.trimIndent()
