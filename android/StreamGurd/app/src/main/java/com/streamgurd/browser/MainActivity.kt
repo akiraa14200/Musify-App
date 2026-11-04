@@ -64,13 +64,15 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         blocking = prefs.getBoolean("blocking", true)
-        window.statusBarColor = Color.TRANSPARENT
-        window.navigationBarColor = Color.TRANSPARENT
+        // Keep the Android status/notification and gesture-navigation areas reserved.
+        // The browser fills the app content area, never drawing behind system bars.
+        window.statusBarColor = Color.rgb(8, 12, 23)
+        window.navigationBarColor = Color.rgb(8, 12, 23)
         if (android.os.Build.VERSION.SDK_INT >= 30) {
-            window.setDecorFitsSystemWindows(false)
+            window.setDecorFitsSystemWindows(true)
         } else {
             @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_LAYOUT_STABLE or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION)
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
         }
         buildUi()
         configureWeb()
@@ -93,19 +95,6 @@ class MainActivity : Activity() {
         val accent = Color.rgb(171, 198, 255)
 
         root = FrameLayout(this).apply { setBackgroundColor(bg) }
-        root.setOnApplyWindowInsetsListener { _, insets ->
-            var top = 0
-            var bottom = 0
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                val bars = insets.getInsets(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
-                top = bars.top; bottom = bars.bottom
-            } else {
-                @Suppress("DEPRECATION")
-                run { top = insets.systemWindowInsetTop; bottom = insets.systemWindowInsetBottom }
-            }
-            contentLayout.setPadding(dp(10), top + dp(5), dp(10), bottom + dp(4))
-            insets
-        }
         contentLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(10), dp(5), dp(10), dp(4))
@@ -190,7 +179,11 @@ class MainActivity : Activity() {
         browserBar.addView(actionButton("‹ Back") { if (web.canGoBack()) web.goBack() }, LinearLayout.LayoutParams(0, dp(34), 1f).apply { rightMargin = dp(3) })
         browserBar.addView(actionButton("Forward ›") { if (web.canGoForward()) web.goForward() }, LinearLayout.LayoutParams(0, dp(34), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
         browserBar.addView(actionButton("↻ Reload") { web.reload() }, LinearLayout.LayoutParams(0, dp(34), 1f).apply { leftMargin = dp(3) })
-        contentLayout.addView(browserBar, LinearLayout.LayoutParams(-1, dp(38)))
+        // Pin browser navigation to the bottom edge of the app content.
+        // It floats above the page without covering Android's system navigation area.
+        root.addView(browserBar, FrameLayout.LayoutParams(-1, dp(42), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
+            leftMargin = dp(14); rightMargin = dp(14); bottomMargin = dp(10)
+        })
 
         peekButton = actionButton("◉") { toggleBrowserChrome() }.apply { textSize = 18f; visibility = View.GONE; elevation = dp(8).toFloat() }
         root.addView(peekButton, FrameLayout.LayoutParams(dp(42), dp(42), Gravity.END or Gravity.BOTTOM).apply { rightMargin = dp(10); bottomMargin = dp(10) })
