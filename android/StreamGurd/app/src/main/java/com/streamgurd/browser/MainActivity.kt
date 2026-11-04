@@ -862,8 +862,23 @@ class MainActivity : Activity() {
                 val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return true
                 if (scheme !in listOf("http", "https")) return true
 
-                // Allow normal navigation, including cross-domain players and CDNs.
-                // Pop-up and new-tab attempts are handled by installPopupGuard().
+                val destination = canonicalHost(uri.host.orEmpty())
+                val trusted = canonicalHost(trustedHost)
+                val sameSite = trusted.isNotBlank() &&
+                    (destination == trusted || destination.endsWith(".$trusted"))
+
+                // A deliberate tap may open another site. Automatic cross-site
+                // redirects (HTTP redirects or script/meta navigation) are stopped.
+                if (blocking && destination.isNotBlank() && !sameSite &&
+                    (request.isRedirect || !request.hasGesture())) {
+                    runOnUiThread { toast("Blocked an automatic redirect") }
+                    return true
+                }
+
+                // A user-initiated navigation becomes the new trusted browsing origin.
+                if (request.hasGesture() && destination.isNotBlank()) {
+                    trustedHost = destination
+                }
                 return false
             }
 
@@ -872,7 +887,14 @@ class MainActivity : Activity() {
                 val uri = try { URI(url ?: return true) } catch (_: Exception) { return true }
                 val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return true
                 if (scheme !in listOf("http", "https")) return true
-                // Allow normal navigation; the popup guard handles new tabs.
+                val destination = canonicalHost(uri.host.orEmpty())
+                val trusted = canonicalHost(trustedHost)
+                val sameSite = trusted.isNotBlank() &&
+                    (destination == trusted || destination.endsWith(".$trusted"))
+                if (blocking && destination.isNotBlank() && !sameSite) {
+                    toast("Blocked an automatic redirect")
+                    return true
+                }
                 return false
             }
         }
