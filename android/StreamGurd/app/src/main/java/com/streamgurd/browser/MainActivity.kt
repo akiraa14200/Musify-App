@@ -64,19 +64,48 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         blocking = prefs.getBoolean("blocking", true)
-        // Keep the Android status/notification and gesture-navigation areas reserved.
-        // The browser fills the app content area, never drawing behind system bars.
-        window.statusBarColor = Color.rgb(8, 12, 23)
-        window.navigationBarColor = Color.rgb(8, 12, 23)
-        if (android.os.Build.VERSION.SDK_INT >= 30) {
-            window.setDecorFitsSystemWindows(true)
-        } else {
-            @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
-        }
+        applyBrowserSystemBars()
         buildUi()
         configureWeb()
         prefs.getString("last_url", null)?.let { open(it) }
+    }
+
+    private fun applyBrowserSystemBars() {
+        window.statusBarColor = Color.rgb(8, 12, 23)
+        window.navigationBarColor = Color.rgb(8, 12, 23)
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            window.setDecorFitsSystemWindows(false)
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility =
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+        }
+        // Explicitly reserve the status-bar/notch and bottom system-gesture areas.
+        // Content and browser controls are laid out only inside the remaining safe area.
+        root?.setOnApplyWindowInsetsListener { view, insets ->
+            val top: Int
+            val bottom: Int
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                val bars = insets.getInsets(
+                    WindowInsets.Type.statusBars() or
+                    WindowInsets.Type.navigationBars() or
+                    WindowInsets.Type.displayCutout()
+                )
+                top = maxOf(bars.top, insets.displayCutout?.safeInsetTop ?: 0)
+                bottom = bars.bottom
+            } else {
+                @Suppress("DEPRECATION")
+                run {
+                    top = maxOf(insets.systemWindowInsetTop, insets.systemWindowInsetTop)
+                    bottom = insets.systemWindowInsetBottom
+                }
+            }
+            view.setPadding(0, top, 0, bottom)
+            insets
+        }
+        root?.requestApplyInsets()
     }
 
     private fun dp(n: Int) = (n * resources.displayMetrics.density).toInt()
@@ -537,10 +566,7 @@ class MainActivity : Activity() {
         fullView?.let { (it.parent as? ViewGroup)?.removeView(it) }
         fullView = null; fullCallback?.onCustomViewHidden(); fullCallback = null
         root.visibility = View.VISIBLE
-        if (android.os.Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false) else {
-            @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-        }
+        applyBrowserSystemBars()
     }
     private fun toast(message: String) = Toast.makeText(this,message,Toast.LENGTH_SHORT).show()
     @Deprecated("Deprecated in Android")
