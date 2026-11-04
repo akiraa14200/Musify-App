@@ -531,24 +531,11 @@ class MainActivity : Activity() {
         var musicSource = "saavn"
         val saavnTab = actionButton("SAAVN", true) {}
         val youtubeTab = actionButton("YOUTUBE", false) {}
-        fun selectMusicSource(source: String) {
-            musicSource = source
-            saavnTab.alpha = if (source == "saavn") 1f else 0.55f
-            youtubeTab.alpha = if (source == "youtube") 1f else 0.55f
-            tracks.clear(); adapterRefreshPlaceholder()
-            if (query.text.isNotBlank()) {
-                pendingMusicSearch?.let { musicSearchHandler.removeCallbacks(it) }
-                searchMusic(query.text.toString(), tracks, adapter, info, musicSource)
-            } else info.text = if (source == "youtube") "Search YouTube music through Piped" else "Search songs with JioSaavn"
-        }
+        val refreshMusic = actionButton("↻", false) {}
         filterRow.addView(saavnTab, LinearLayout.LayoutParams(dp(94), dp(36)).apply { rightMargin = dp(7) })
         filterRow.addView(youtubeTab, LinearLayout.LayoutParams(dp(104), dp(36)))
         filterRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
-        filterRow.addView(actionButton("↻", false) {
-            if (query.text.isNotBlank()) searchMusic(query.text.toString(), tracks, adapter, info, musicSource)
-        }, LinearLayout.LayoutParams(dp(42), dp(36)))
-        saavnTab.setOnClickListener { selectMusicSource("saavn") }
-        youtubeTab.setOnClickListener { selectMusicSource("youtube") }
+        filterRow.addView(refreshMusic, LinearLayout.LayoutParams(dp(42), dp(36)))
         dialogRoot.addView(filterRow, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(10) })
 
         val info = text("Search JioSaavn for songs and artists", 11f, 0xFFB7B7B7.toInt()).apply {
@@ -606,6 +593,21 @@ class MainActivity : Activity() {
         adapter = adapterRef
         list.adapter = adapter
         fun adapterRefreshPlaceholder() { adapter.notifyDataSetChanged() }
+        fun selectMusicSource(source: String) {
+            musicSource = source
+            saavnTab.alpha = if (source == "saavn") 1f else 0.55f
+            youtubeTab.alpha = if (source == "youtube") 1f else 0.55f
+            tracks.clear(); adapter.notifyDataSetChanged()
+            if (query.text.isNotBlank()) {
+                pendingMusicSearch?.let { musicSearchHandler.removeCallbacks(it) }
+                searchMusic(query.text.toString(), tracks, adapter, info, musicSource)
+            } else info.text = if (source == "youtube") "Search YouTube music through Piped" else "Search songs with JioSaavn"
+        }
+        saavnTab.setOnClickListener { selectMusicSource("saavn") }
+        youtubeTab.setOnClickListener { selectMusicSource("youtube") }
+        refreshMusic.setOnClickListener {
+            if (query.text.isNotBlank()) searchMusic(query.text.toString(), tracks, adapter, info, musicSource)
+        }
         dialogRoot.addView(info)
         dialogRoot.addView(list, LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(8) })
 
@@ -792,6 +794,10 @@ ${piped}    private fun playJioSaavnTrack(track: MusicTrack) {
             playPipedMusicTrack(track)
             return
         }
+        playResolvedMusicTrack(track)
+    }
+
+    private fun playResolvedMusicTrack(track: MusicTrack) {
         stopMusic(updateStatus = false)
         currentMusic = track
         musicStatus?.text = "Connecting · ${track.title}"
