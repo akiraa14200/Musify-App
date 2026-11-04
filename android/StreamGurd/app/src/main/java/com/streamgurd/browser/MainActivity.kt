@@ -20,6 +20,10 @@ import java.net.URI
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
+import android.os.SystemClock
+import androidx.webkit.WebResourceRequestCompat
+import androidx.webkit.WebViewClientCompat
+import androidx.webkit.WebViewFeature
 
 class MainActivity : Activity() {
     private data class SiteEntry(val name: String, val url: String, val category: String)
@@ -63,7 +67,7 @@ class MainActivity : Activity() {
     private var blocking = true
     private var host = ""
     private var trustedHost = ""
-    private var lastCommittedUrl = ""
+    private var lastUserTouchAt = 0L
     private var fullView: View? = null
     private var fullCallback: WebChromeClient.CustomViewCallback? = null
     private val prefs by lazy { getSharedPreferences("streamgurd", MODE_PRIVATE) }
@@ -845,68 +849,47 @@ class MainActivity : Activity() {
         }
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(web,false)
-        web.webViewClient = object : WebViewClient() {
+        web.setOnTouchListener { _, event ->
+            if (event.actionMasked == MotionEvent.ACTION_UP) lastUserTouchAt = SystemClock.elapsedRealtime()
+            false
+        }
+        val redirectFlagSupported = WebViewFeature.isFeatureSupported(WebViewFeature.WEB_RESOURCE_REQUEST_IS_REDIRECT)
+        web.webViewClient = object : WebViewClientCompat() {
             // No request filtering: site scripts, images, video streams and CDNs remain untouched.
             override fun onPageStarted(view: WebView?, page: String?, favicon: android.graphics.Bitmap?) {
                 page?.let { url.setText(it); host = hostOf(it); status.text = "LOADING · $host" }
                 if (blocking) installPopupGuard()
             }
             override fun onPageCommitVisible(view: WebView?, page: String?) {
-                page?.let {
-                    val scheme = try { URI(it).scheme?.lowercase(Locale.ROOT) } catch (_: Exception) { null }
-                    if (scheme == "http" || scheme == "https") lastCommittedUrl = it
-                }
                 if (blocking) installPopupGuard()
             }
             override fun onPageFinished(view: WebView?, page: String?) {
                 page?.let { prefs.edit().putString("last_url",it).apply(); saveHistory(it) }
                 status.text = if(blocking) "REDIRECT PROTECTION ON · $host" else "REDIRECT PROTECTION OFF · $host"
             }
-            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                val uri = request?.url ?: return true
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                val uri = request.url
                 val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return true
-                if (scheme !in listOf("http", "https")) return true
-
-                // Only apply navigation policy to the top-level document. Images,
-                // scripts, API calls, fonts and media from other domains must keep working.
+                if (scheme != "http" && scheme != "https") return true
                 if (!request.isForMainFrame) return false
 
                 val destination = canonicalHost(uri.host.orEmpty())
                 val trusted = canonicalHost(trustedHost)
                 val sameSite = trusted.isNotBlank() &&
-                    (destination == trusted || destination.endsWith(".$trusted"))
+                    (destination == trusted || destination.endsWith("." + trusted))
+                val recentTouch = SystemClock.elapsedRealtime() - lastUserTouchAt < 1800L
+                val userInitiated = request.hasGesture() || recentTouch
+                val serverRedirect = redirectFlagSupported && WebResourceRequestCompat.isRedirect(request)
 
-                // Block cross-site HTTP redirect chains and script/meta navigations
-                // without a fresh user gesture. Same-site canonical redirects remain valid.
-                val automaticCrossSite = destination.isNotBlank() && !sameSite &&
-                    (request.isRedirect || !request.hasGesture())
-                if (blocking && automaticCrossSite) {
-                    // Return to the exact document that initiated this redirect,
-                    // not the browser home page or an older previously visited URL.
-                    val sourcePage = view?.url.orEmpty().ifBlank { lastCommittedUrl }
-                    view?.stopLoading()
-                    if (sourcePage.isNotBlank()) {
-                        view?.post {
-                            val visibleUrl = view.url.orEmpty()
-                            val visibleHost = canonicalHost(hostOf(visibleUrl))
-                            val sourceHost = canonicalHost(hostOf(sourcePage))
-                            // Usually cancellation leaves the source document intact.
-                            // Reload it only if WebView has already switched away/blanked.
-                            if (visibleUrl.isBlank() || visibleHost.isBlank() ||
-                                (sourceHost.isNotBlank() && visibleHost != sourceHost)) {
-                                view.loadUrl(sourcePage)
-                            }
-                        }
-                    }
-                    runOnUiThread { toast("Blocked an automatic redirect to $destination") }
+                // WebViewClientCompat receives server redirects before they are followed
+                // when the provider supports SHOULD_OVERRIDE_WITH_REDIRECTS.
+                val unwantedCrossSite = destination.isNotBlank() && !sameSite &&
+                    (serverRedirect || !userInitiated)
+                if (blocking && unwantedCrossSite) {
+                    runOnUiThread { toast("Blocked redirect to " + destination) }
                     return true
                 }
-
-                // Explicit user navigation is allowed and establishes the next
-                // trusted origin. The following automatic cross-site hop is still blocked.
-                if (request.hasGesture() && destination.isNotBlank()) {
-                    trustedHost = destination
-                }
+                if (userInitiated && destination.isNotBlank()) trustedHost = destination
                 return false
             }
 
@@ -972,7 +955,7 @@ class MainActivity : Activity() {
         val value = normalized(raw)
         if (value == null) { toast("Enter a valid website URL"); return }
         trustedHost = canonicalHost(hostOf(value))
-        lastCommittedUrl = ""
+        lastUserTouchAt = 0L
         host = hostOf(value)
         homePanel.visibility = View.GONE
         web.visibility = View.VISIBLE
