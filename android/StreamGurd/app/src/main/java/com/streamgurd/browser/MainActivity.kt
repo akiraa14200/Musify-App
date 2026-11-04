@@ -211,6 +211,7 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(-1, dp(44)).apply { bottomMargin = dp(7) })
         }
         addFeature("♫  Music Player · JioSaavn", ::showMusicPlayer)
+        addFeature("⌕  Test YouTube Music Servers", ::runPipedDiagnostics)
         addFeature("＋  Add Website", ::addLink)
         addFeature("☆  Saved Websites", ::showSaved)
         addFeature("☷  Anime & Manga Sites", ::showCatalogue)
@@ -852,6 +853,117 @@ class MainActivity : Activity() {
         cachedPipedInstances = result
         pipedInstancesFetchedAt = now
         return result
+    }
+
+    // Device-side diagnostic: tests live search and stream endpoints without changing playback.
+    private fun runPipedDiagnostics() {
+        val output = TextView(this).apply {
+            text = "Preparing Piped server tests…"
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+        }
+        val scroll = ScrollView(this).apply { addView(output) }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("YouTube Music · Server test")
+            .setView(scroll)
+            .setNegativeButton("Close", null)
+            .create()
+        dialog.show()
+        Thread {
+            val report = StringBuilder()
+            try {
+                val hosts = pipedInstances().take(6)
+                if (hosts.isEmpty()) report.append("No Piped API instances were discovered.\n")
+                for ((index, base) in hosts.withIndex()) {
+                    val host = try { URI(base).host ?: base } catch (_: Exception) { base }
+                    var searchStatus = "not tested"
+                    var itemCount = 0
+                    var streamStatus = "not tested"
+                    var audioAvailable = false
+                    var detail = ""
+                    var searchConnection: HttpURLConnection? = null
+                    try {
+                        val path = "/search?q=" + java.net.URLEncoder.encode("one piece opening", "UTF-8") + "&filter=music_songs"
+                        searchConnection = (URL(base + path).openConnection() as HttpURLConnection).apply {
+                            connectTimeout = 3500
+                            readTimeout = 5000
+                            requestMethod = "GET"
+                            setRequestProperty("Accept", "application/json")
+                            setRequestProperty("User-Agent", "StrawhatPirate/1.2 (Android)")
+                        }
+                        val code = searchConnection.responseCode
+                        searchStatus = "HTTP $code"
+                        if (code in 200..299) {
+                            val body = searchConnection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                            val parsed = org.json.JSONTokener(body).nextValue()
+                            val items = when (parsed) {
+                                is org.json.JSONArray -> parsed
+                                is org.json.JSONObject -> parsed.optJSONArray("items") ?: parsed.optJSONArray("results")
+                                    ?: throw IllegalStateException("SearchPage missing items/results")
+                                else -> throw IllegalStateException("Unexpected search JSON")
+                            }
+                            itemCount = items.length()
+                            var videoId = ""
+                            for (i in 0 until items.length()) {
+                                val item = items.optJSONObject(i) ?: continue
+                                val url = item.optString("url")
+                                val rawId = item.optString("id").trim()
+                                videoId = Regex("(?:[?&]v=|/watch/)([A-Za-z0-9_-]{6,})").find(url)?.groupValues?.getOrNull(1)
+                                    ?: rawId.takeIf { it.matches(Regex("[A-Za-z0-9_-]{6,}")) }.orEmpty()
+                                if (videoId.isNotBlank()) break
+                            }
+                            if (videoId.isBlank()) {
+                                streamStatus = "no video ID"
+                            } else {
+                                var streamConnection: HttpURLConnection? = null
+                                try {
+                                    streamConnection = (URL("$base/streams/$videoId").openConnection() as HttpURLConnection).apply {
+                                        connectTimeout = 3500
+                                        readTimeout = 5000
+                                        requestMethod = "GET"
+                                        setRequestProperty("Accept", "application/json")
+                                        setRequestProperty("User-Agent", "StrawhatPirate/1.2 (Android)")
+                                    }
+                                    val streamCode = streamConnection.responseCode
+                                    streamStatus = "HTTP $streamCode"
+                                    if (streamCode in 200..299) {
+                                        val streamBody = streamConnection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                                        val streamJson = org.json.JSONTokener(streamBody).nextValue() as? org.json.JSONObject
+                                            ?: throw IllegalStateException("Unexpected stream JSON")
+                                        val streams = streamJson.optJSONArray("audioStreams") ?: org.json.JSONArray()
+                                        for (j in 0 until streams.length()) {
+                                            val stream = streams.optJSONObject(j) ?: continue
+                                            if (stream.optString("url").startsWith("https://") &&
+                                                stream.optString("mimeType").contains("audio", true)) {
+                                                audioAvailable = true
+                                                break
+                                            }
+                                        }
+                                        if (!audioAvailable) detail = "no usable audioStreams"
+                                    }
+                                } finally { streamConnection?.disconnect() }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        detail = e.javaClass.simpleName + (e.message?.let { ": $it" } ?: "")
+                    } finally { searchConnection?.disconnect() }
+                    report.append("\${index + 1}. $host\n")
+                        .append("   Search: $searchStatus · items: $itemCount\n")
+                        .append("   Stream: $streamStatus · audio: \${if (audioAvailable) "YES" else "NO"}\n")
+                    if (detail.isNotBlank()) report.append("   Note: $detail\n")
+                    report.append("\n")
+                    val snapshot = report.toString()
+                    runOnUiThread { if (dialog.isShowing) output.text = "Testing \${index + 1}/\${hosts.size}…\n\n$snapshot" }
+                }
+                report.append("PASS = search returned a video ID and /streams returned an HTTPS audio stream.\n")
+                    .append("This tests API availability only; it does not guarantee playback on every network.")
+            } catch (e: Exception) {
+                report.append("Diagnostic failed: ").append(e.message ?: e.javaClass.simpleName)
+            }
+            val finalReport = report.toString()
+            runOnUiThread { if (dialog.isShowing) output.text = finalReport }
+        }.start()
     }
 
     private fun pipedRequest(path: String): org.json.JSONObject {
