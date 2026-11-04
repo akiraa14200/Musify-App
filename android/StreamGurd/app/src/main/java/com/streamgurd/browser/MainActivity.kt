@@ -23,6 +23,7 @@ class MainActivity : Activity() {
     private lateinit var homePanel: LinearLayout
     private var blocking = true
     private var host = ""
+    private var trustedHost = ""
     private var fullView: View? = null
     private var fullCallback: WebChromeClient.CustomViewCallback? = null
     private val prefs by lazy { getSharedPreferences("streamgurd", MODE_PRIVATE) }
@@ -134,7 +135,7 @@ class MainActivity : Activity() {
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                 val uri = request?.url ?: return null
                 val h = uri.host?.lowercase(Locale.ROOT) ?: return null
-                val sameSite = h == host || h.endsWith(".$host")
+                val sameSite = isTrustedSiteHost(h)
                 val denied = blocking && !sameSite && blocked.any { h == it || h.endsWith(".$it") }
                 return if(denied) WebResourceResponse("text/plain","utf-8",204,"Blocked", emptyMap(),java.io.ByteArrayInputStream(ByteArray(0)))
                     else super.shouldInterceptRequest(view,request)
@@ -147,8 +148,35 @@ class MainActivity : Activity() {
                 status.text = if(blocking) "PROTECTION ACTIVE · $host" else "PROTECTION PAUSED · $host"
             }
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                val scheme = request?.url?.scheme ?: return true
-                return scheme !in listOf("http","https")
+                val uri = request?.url ?: return true
+                val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return true
+                if (scheme !in listOf("http", "https")) return true
+
+                // Only guard top-level page changes. Embedded players, images, scripts,
+                // and other subframe resources remain available unless their host is blocked.
+                if (request.isForMainFrame) {
+                    val destination = uri.host?.lowercase(Locale.ROOT) ?: return true
+                    val isKnownAdHost = blocked.any { destination == it || destination.endsWith(".$it") }
+                    if (isKnownAdHost || !isTrustedSiteHost(destination)) {
+                        status.text = "BLOCKED REDIRECT · $destination"
+                        return true
+                    }
+                }
+                return false
+            }
+
+            @Suppress("DEPRECATION")
+            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                val uri = try { URI(url ?: return true) } catch (_: Exception) { return true }
+                val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return true
+                if (scheme !in listOf("http", "https")) return true
+                val destination = uri.host?.lowercase(Locale.ROOT) ?: return true
+                val isKnownAdHost = blocked.any { destination == it || destination.endsWith(".$it") }
+                if (isKnownAdHost || !isTrustedSiteHost(destination)) {
+                    status.text = "BLOCKED REDIRECT · $destination"
+                    return true
+                }
+                return false
             }
         }
         web.webChromeClient = object : WebChromeClient() {
@@ -165,6 +193,15 @@ class MainActivity : Activity() {
     }
 
     private fun hostOf(value: String) = try { URI(value).host?.lowercase(Locale.ROOT) ?: "" } catch (_: Exception) { "" }
+
+    private fun canonicalHost(value: String): String =
+        value.lowercase(Locale.ROOT).removePrefix("www.")
+
+    private fun isTrustedSiteHost(destination: String): Boolean {
+        val trusted = canonicalHost(trustedHost)
+        val target = canonicalHost(destination)
+        return trusted.isNotBlank() && (target == trusted || target.endsWith(".$trusted"))
+    }
     private fun normalized(raw: String): String? {
         var value = raw.trim()
         if(value.isEmpty()) return null
@@ -174,9 +211,11 @@ class MainActivity : Activity() {
     private fun open(raw: String) {
         val value = normalized(raw)
         if(value == null) { toast("Enter a valid website URL"); return }
+        trustedHost = canonicalHost(hostOf(value))
+        host = hostOf(value)
         homePanel.visibility = View.GONE
         web.visibility = View.VISIBLE
-        status.text = "LOADING"; url.setText(value); web.loadUrl(value)
+        status.text = "LOADING · $host"; url.setText(value); web.loadUrl(value)
     }
     private fun showHome() {
         web.visibility = View.GONE
