@@ -305,7 +305,8 @@ class MainActivity : Activity() {
     private fun setBrowserChromeVisible(visible: Boolean) {
         chromeVisible = visible
         val v = if (visible) View.VISIBLE else View.GONE
-        headerBar.visibility = v; addressBar.visibility = v; statusRow.visibility = v
+        headerBar.visibility = if (visible && web.visibility != View.VISIBLE) View.VISIBLE else View.GONE
+        addressBar.visibility = v; statusRow.visibility = v
         // The expandable floating top-actions control is part of the root overlay.
         root.findViewWithTag<View>("top-actions-toggle")?.visibility = v
         root.findViewWithTag<View>("top-actions-panel")?.visibility =
