@@ -127,12 +127,17 @@ class MainActivity : Activity() {
         root.addView(contentLayout, FrameLayout.LayoutParams(-1, -1))
 
         headerBar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(2), 0, dp(2), dp(3)) }
-        val brandMark = TextView(this).apply {
-            text = "☠"; textSize = 19f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
-            setTextColor(Color.rgb(9, 15, 29))
-            background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(235, 237, 239), Color.rgb(150, 155, 160))).apply { cornerRadius = dp(11).toFloat() }
+        val brandMark = ImageView(this).apply {
+            setImageResource(R.drawable.strawhat_logo)
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = GradientDrawable().apply {
+                setColor(Color.TRANSPARENT)
+                cornerRadius = dp(11).toFloat()
+            }
+            clipToOutline = true
+            contentDescription = "Strawhat Pirate logo"
         }
-        headerBar.addView(brandMark, LinearLayout.LayoutParams(dp(34), dp(34)))
+        headerBar.addView(brandMark, LinearLayout.LayoutParams(dp(38), dp(38)))
         val brandText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(8), 0, 0, 0) }
         brandText.addView(text("Strawhat Pirate", 16f, Color.WHITE, true))
         brandText.addView(text("THE GRAND LINE BROWSER", 8f, muted, true))
