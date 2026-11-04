@@ -57,65 +57,213 @@ class MainActivity : Activity() {
             if (bold) typeface = Typeface.DEFAULT_BOLD
         }
     private fun buildUi() {
+        val bg = Color.rgb(8, 12, 23)
+        val panel = Color.rgb(17, 25, 42)
+        val surface = Color.rgb(23, 33, 53)
+        val muted = Color.rgb(145, 161, 190)
+        val accent = Color.rgb(171, 198, 255)
+
         root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(dp(14),dp(10),dp(14),dp(8))
-            setBackgroundColor(Color.rgb(9,13,24))
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(12), dp(16), dp(10))
+            setBackgroundColor(bg)
         }
-        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        header.addView(text("StreamGurd",23f,Color.WHITE,true))
-        val space = View(this)
-        header.addView(space, LinearLayout.LayoutParams(0,1,1f))
-        val shield = text(if(blocking) "🛡 BLOCKING" else "🛡 PAUSED",12f,Color.rgb(169,196,255),true)
-        shield.setPadding(dp(12),dp(9),dp(12),dp(9)); shield.background = shape(Color.rgb(25,34,54),24)
-        shield.setOnClickListener { blocking = !blocking; prefs.edit().putBoolean("blocking",blocking).apply(); shield.text = if(blocking) "🛡 BLOCKING" else "🛡 PAUSED"; web.reload() }
+
+        // Brand header and live protection indicator
+        val header = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(3), 0, dp(12))
+        }
+        val brandMark = TextView(this).apply {
+            text = "S"
+            textSize = 20f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(9, 15, 29))
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(190, 211, 255), Color.rgb(115, 151, 220))).apply {
+                cornerRadius = dp(15).toFloat()
+            }
+        }
+        header.addView(brandMark, LinearLayout.LayoutParams(dp(42), dp(42)))
+        val brandText = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), 0, 0, 0)
+        }
+        brandText.addView(text("StreamGurd", 20f, Color.WHITE, true))
+        brandText.addView(text("PRIVATE BROWSING", 9f, muted, true))
+        header.addView(brandText)
+        header.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        val shield = TextView(this).apply {
+            text = if (blocking) "盾  PROTECTED" else "盾  PAUSED"
+            textSize = 11f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(if (blocking) accent else Color.rgb(255, 196, 140))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = GradientDrawable().apply {
+                setColor(if (blocking) Color.rgb(27, 43, 69) else Color.rgb(55, 39, 28))
+                cornerRadius = dp(30).toFloat()
+                setStroke(dp(1), if (blocking) Color.rgb(56, 79, 117) else Color.rgb(112, 76, 43))
+            }
+            setOnClickListener {
+                blocking = !blocking
+                prefs.edit().putBoolean("blocking", blocking).apply()
+                text = if (blocking) "盾  PROTECTED" else "盾  PAUSED"
+                setTextColor(if (blocking) accent else Color.rgb(255, 196, 140))
+                web.reload()
+            }
+        }
         header.addView(shield)
-        root.addView(header,LinearLayout.LayoutParams(-1,dp(48)))
+        root.addView(header, LinearLayout.LayoutParams(-1, dp(56)))
 
-        val bar = LinearLayout(this).apply {
-            gravity = Gravity.CENTER_VERTICAL; setPadding(dp(10),dp(3),dp(4),dp(3))
-            background = shape(Color.rgb(22,29,45),18)
+        // Rounded address field
+        val addressCard = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(13), dp(3), dp(5), dp(3))
+            background = GradientDrawable().apply {
+                setColor(surface)
+                cornerRadius = dp(18).toFloat()
+                setStroke(dp(1), Color.rgb(42, 56, 82))
+            }
         }
+        addressCard.addView(text("⌕", 25f, accent, true).apply {
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(dp(30), dp(46)))
         url = EditText(this).apply {
-            hint = "Paste website link"; setHintTextColor(Color.GRAY); setTextColor(Color.WHITE)
-            textSize = 14f; setSingleLine(true); setBackgroundColor(Color.TRANSPARENT)
+            hint = "Search or enter website address"
+            setHintTextColor(Color.rgb(112, 128, 154))
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            setSingleLine(true)
+            setPadding(dp(5), 0, dp(5), 0)
+            setBackgroundColor(Color.TRANSPARENT)
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_GO
-            setOnEditorActionListener { _,_,_ -> open(text.toString()); true }
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setOnEditorActionListener { _, _, _ -> open(text.toString()); true }
         }
-        val go = actionButton("GO") { open(url.text.toString()) }
-        bar.addView(url,LinearLayout.LayoutParams(0,dp(46),1f))
-        bar.addView(go,LinearLayout.LayoutParams(dp(54),dp(40)))
-        root.addView(bar,LinearLayout.LayoutParams(-1,dp(52)))
+        addressCard.addView(url, LinearLayout.LayoutParams(0, dp(48), 1f))
+        addressCard.addView(actionButton("GO", true) { open(url.text.toString()) },
+            LinearLayout.LayoutParams(dp(52), dp(40)))
+        root.addView(addressCard, LinearLayout.LayoutParams(-1, dp(56)))
 
-        val actions = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0,dp(7),0,dp(7)) }
-        actions.addView(actionButton("+ Add link") { addLink() },LinearLayout.LayoutParams(0,dp(42),1f))
-        actions.addView(actionButton("☆ Saved") { showSaved() },LinearLayout.LayoutParams(0,dp(42),1f))
-        actions.addView(actionButton("⋮ Menu") { menu() },LinearLayout.LayoutParams(0,dp(42),1f))
+        // Main shortcuts
+        val actions = LinearLayout(this).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, dp(10), 0, dp(10))
+        }
+        actions.addView(actionButton("＋  Add link") { addLink() },
+            LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(5) })
+        actions.addView(actionButton("☆  Saved") { showSaved() },
+            LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(5); rightMargin = dp(5) })
+        actions.addView(actionButton("⋯  Menu") { menu() },
+            LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(5) })
         root.addView(actions)
-        status = text("READY · Aggressive protection enabled",11f,Color.rgb(143,160,190))
-        root.addView(status)
+
+        val statusRow = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(2), dp(2), dp(2), dp(9))
+        }
+        val statusDot = View(this).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.rgb(104, 215, 163))
+            }
+        }
+        statusRow.addView(statusDot, LinearLayout.LayoutParams(dp(7), dp(7)))
+        status = text("  READY  ·  Ad and tracker protection is on", 10f, muted)
+        statusRow.addView(status)
+        statusRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        root.addView(statusRow)
+
         homePanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(dp(22),dp(24),dp(22),dp(24))
-            background = shape(Color.rgb(16,23,38),24)
+            setPadding(dp(20), dp(20), dp(20), dp(20))
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(24, 37, 61), Color.rgb(14, 21, 36))).apply {
+                cornerRadius = dp(26).toFloat()
+                setStroke(dp(1), Color.rgb(42, 59, 88))
+            }
         }
-        homePanel.addView(text("Your quieter corner of the web",22f,Color.WHITE,true))
-        val intro = text("Add a website link to browse with aggressive protection against known ad and tracker domains.",14f,Color.rgb(157,173,201))
+        val heroIcon = TextView(this).apply {
+            text = "◈"
+            textSize = 38f
+            gravity = Gravity.CENTER
+            setTextColor(accent)
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(35, 53, 83))
+                cornerRadius = dp(22).toFloat()
+            }
+        }
+        homePanel.addView(heroIcon, LinearLayout.LayoutParams(dp(68), dp(68)).apply {
+            gravity = Gravity.CENTER
+            bottomMargin = dp(16)
+        })
+        val headline = text("Browse with more control.", 22f, Color.WHITE, true)
+        headline.gravity = Gravity.CENTER
+        homePanel.addView(headline)
+        val intro = text(
+            "Your browser, your choice. StreamGurd blocks known ad and tracker domains and helps stop unwanted site redirects.",
+            13f, Color.rgb(164, 180, 207)
+        )
         intro.gravity = Gravity.CENTER
-        intro.setPadding(0,dp(12),0,dp(20))
+        intro.setLineSpacing(dp(3).toFloat(), 1f)
+        intro.setPadding(dp(4), dp(10), dp(4), dp(18))
         homePanel.addView(intro)
-        homePanel.addView(actionButton("+ ADD WEBSITE LINK") { addLink() },LinearLayout.LayoutParams(-1,dp(48)))
-        root.addView(homePanel,LinearLayout.LayoutParams(-1,0,1f))
+
+        val featureRow = LinearLayout(this).apply { gravity = Gravity.CENTER }
+        featureRow.addView(featureChip("◉  Tracker filter"), LinearLayout.LayoutParams(0, dp(36), 1f).apply { rightMargin = dp(4) })
+        featureRow.addView(featureChip("↗  Redirect guard"), LinearLayout.LayoutParams(0, dp(36), 1f).apply { leftMargin = dp(4) })
+        homePanel.addView(featureRow)
+        homePanel.addView(actionButton("＋   OPEN A WEBSITE", true) { addLink() },
+            LinearLayout.LayoutParams(-1, dp(50)).apply { topMargin = dp(20) })
+        root.addView(homePanel, LinearLayout.LayoutParams(-1, 0, 1f))
+
         web = WebView(this)
-        root.addView(web,LinearLayout.LayoutParams(-1,0,1f))
+        root.addView(web, LinearLayout.LayoutParams(-1, 0, 1f))
+        val browserBar = LinearLayout(this).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, 0)
+        }
+        browserBar.addView(actionButton("‹  Back") { if (web.canGoBack()) web.goBack() },
+            LinearLayout.LayoutParams(0, dp(42), 1f).apply { rightMargin = dp(5) })
+        browserBar.addView(actionButton("Forward  ›") { if (web.canGoForward()) web.goForward() },
+            LinearLayout.LayoutParams(0, dp(42), 1f).apply { leftMargin = dp(5); rightMargin = dp(5) })
+        browserBar.addView(actionButton("↻  Reload") { web.reload() },
+            LinearLayout.LayoutParams(0, dp(42), 1f).apply { leftMargin = dp(5) })
+        root.addView(browserBar)
         setContentView(root)
         web.visibility = View.GONE
+        browserBar.visibility = View.GONE
         showHome()
+        // Keep the compact browser controls attached to the root for visibility changes.
+        web.tag = browserBar
     }
 
-    private fun actionButton(label: String, click: () -> Unit) = TextView(this).apply {
-        text = label; gravity = Gravity.CENTER; textSize = 13f; typeface = Typeface.DEFAULT_BOLD
-        setTextColor(Color.rgb(221,230,247)); background = shape(Color.rgb(23,32,50),14)
+    private fun featureChip(label: String) = TextView(this).apply {
+        text = label
+        gravity = Gravity.CENTER
+        textSize = 10f
+        typeface = Typeface.DEFAULT_BOLD
+        setTextColor(Color.rgb(174, 194, 228))
+        background = GradientDrawable().apply {
+            setColor(Color.rgb(27, 42, 66))
+            cornerRadius = dp(18).toFloat()
+        }
+    }
+
+    private fun actionButton(label: String, prominent: Boolean = false, click: () -> Unit) = TextView(this).apply {
+        text = label
+        gravity = Gravity.CENTER
+        textSize = 12f
+        typeface = Typeface.DEFAULT_BOLD
+        setTextColor(if (prominent) Color.rgb(10, 17, 31) else Color.rgb(215, 226, 245))
+        background = GradientDrawable().apply {
+            setColor(if (prominent) Color.rgb(174, 199, 246) else Color.rgb(22, 32, 51))
+            cornerRadius = dp(14).toFloat()
+            setStroke(dp(1), if (prominent) Color.rgb(198, 216, 255) else Color.rgb(42, 57, 82))
+        }
         setOnClickListener { click() }
     }
 
@@ -215,12 +363,14 @@ class MainActivity : Activity() {
         host = hostOf(value)
         homePanel.visibility = View.GONE
         web.visibility = View.VISIBLE
+        (web.tag as? View)?.visibility = View.VISIBLE
         status.text = "LOADING · $host"; url.setText(value); web.loadUrl(value)
     }
     private fun showHome() {
         web.visibility = View.GONE
+        (web.tag as? View)?.visibility = View.GONE
         homePanel.visibility = View.VISIBLE
-        status.text = "READY · Blocking known ad and tracker domains"
+        status.text = "  READY  ·  Ad and tracker protection is on"
     }
     private fun addLink() {
         val field = EditText(this).apply { hint = "https://example.com"; setTextColor(Color.WHITE); setHintTextColor(Color.GRAY); setSingleLine(true) }
