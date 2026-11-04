@@ -567,17 +567,17 @@ class MainActivity : Activity() {
     override fun onBackPressed() {
         when { fullView != null -> exitFullscreen(); web.visibility == View.VISIBLE && web.canGoBack() -> web.goBack(); web.visibility == View.VISIBLE -> showHome(); else -> super.onBackPressed() }
     }
-    override fun onPause() { super.onPause(); web.onPause() }
+    override fun onPause() {
+        web.onPause()
+        mainHandler.removeCallbacks(catalogueRefresh)
+        super.onPause()
+    }
     override fun onResume() {
         super.onResume()
         web.onResume()
         refreshCatalogue(false)
         mainHandler.removeCallbacks(catalogueRefresh)
         mainHandler.postDelayed(catalogueRefresh, 15 * 60 * 1000L)
-    }
-    override fun onPause() {
-        mainHandler.removeCallbacks(catalogueRefresh)
-        super.onPause()
     }
     override fun onDestroy() { mainHandler.removeCallbacks(catalogueRefresh); web.destroy(); super.onDestroy() }
 }
