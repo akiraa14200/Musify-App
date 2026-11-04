@@ -68,6 +68,7 @@ class MainActivity : Activity() {
     private var host = ""
     private var trustedHost = ""
     private var lastUserTouchAt = 0L
+    private var redirectProbeId = 0
     private var fullView: View? = null
     private var fullCallback: WebChromeClient.CustomViewCallback? = null
     private val prefs by lazy { getSharedPreferences("streamgurd", MODE_PRIVATE) }
@@ -882,12 +883,28 @@ class MainActivity : Activity() {
                 val userInitiated = request.hasGesture() || recentTouch
                 val serverRedirect = redirectFlagSupported && WebResourceRequestCompat.isRedirect(request)
 
-                // WebViewClientCompat receives server redirects before they are followed
-                // when the provider supports SHOULD_OVERRIDE_WITH_REDIRECTS.
-                val unwantedCrossSite = destination.isNotBlank() && !sameSite &&
-                    (serverRedirect || !userInitiated)
-                if (blocking && unwantedCrossSite) {
-                    runOnUiThread { toast("Blocked redirect to " + destination) }
+                if (!blocking) {
+                    if (userInitiated && destination.isNotBlank()) trustedHost = destination
+                    return false
+                }
+
+                // Probe cross-site GET navigations off-screen first. The visible page
+                // is not replaced until the redirect chain has passed inspection.
+                val shouldProbe = destination.isNotBlank() &&
+                    request.method.equals("GET", true) &&
+                    ((userInitiated && !sameSite) || (serverRedirect && !sameSite))
+                if (shouldProbe) {
+                    val startUrl = uri.toString()
+                    val baselineHost = if (userInitiated) destination else trusted
+                    if (userInitiated) trustedHost = destination
+                    val probeId = ++redirectProbeId
+                    resolveRedirectInBackground(startUrl, baselineHost, probeId)
+                    return true
+                }
+
+                // POST/form navigations are not replayed by the background checker.
+                if (serverRedirect && destination.isNotBlank() && !sameSite) {
+                    toast("Redirect check unavailable · original page kept")
                     return true
                 }
                 if (userInitiated && destination.isNotBlank()) trustedHost = destination
@@ -916,6 +933,69 @@ class MainActivity : Activity() {
             }
             override fun onHideCustomView() { exitFullscreen() }
         }
+    }
+
+    private fun resolveRedirectInBackground(startUrl: String, baselineHost: String, probeId: Int) {
+        Thread {
+            var current = try { URL(startUrl) } catch (_: Exception) { null }
+            val initialHost = current?.host?.let { canonicalHost(it) }.orEmpty()
+            var crossedHost = false
+            var failed = current == null
+            var hops = 0
+
+            while (current != null && hops < 10) {
+                var connection: HttpURLConnection? = null
+                try {
+                    val target = current
+                    connection = (target.openConnection() as HttpURLConnection).apply {
+                        instanceFollowRedirects = false
+                        requestMethod = "GET"
+                        connectTimeout = 7000
+                        readTimeout = 7000
+                        setRequestProperty("User-Agent", web.settings.userAgentString)
+                        setRequestProperty("Accept", "text/html,application/xhtml+xml,*/*")
+                        CookieManager.getInstance().getCookie(target.toString())?.let {
+                            setRequestProperty("Cookie", it)
+                        }
+                    }
+                    val code = connection.responseCode
+                    if (code in 300..399) {
+                        val location = connection.getHeaderField("Location")
+                        if (location.isNullOrBlank()) {
+                            failed = true
+                            break
+                        }
+                        val next = URL(target, location)
+                        val nextHost = canonicalHost(next.host.orEmpty())
+                        val currentHost = canonicalHost(target.host.orEmpty())
+                        if (nextHost.isBlank() || nextHost != currentHost) crossedHost = true
+                        current = next
+                        hops++
+                    } else {
+                        break
+                    }
+                } catch (_: Exception) {
+                    failed = true
+                    break
+                } finally {
+                    connection?.disconnect()
+                }
+            }
+
+            if (hops >= 10) failed = true
+            val finalUrl = current?.toString()
+            val finalHost = current?.host?.let { canonicalHost(it) }.orEmpty()
+            runOnUiThread {
+                if (isFinishing || probeId != redirectProbeId) return@runOnUiThread
+                if (failed || finalUrl.isNullOrBlank() || crossedHost ||
+                    (baselineHost.isNotBlank() && initialHost != baselineHost)) {
+                    toast("Blocked redirect · original page kept")
+                    return@runOnUiThread
+                }
+                trustedHost = finalHost
+                web.loadUrl(finalUrl)
+            }
+        }.start()
     }
 
     // Block only script-created pop-up windows. Do not intercept page clicks,
