@@ -63,6 +63,7 @@ class MainActivity : Activity() {
     private var blocking = true
     private var host = ""
     private var trustedHost = ""
+    private var lastCommittedUrl = ""
     private var fullView: View? = null
     private var fullCallback: WebChromeClient.CustomViewCallback? = null
     private val prefs by lazy { getSharedPreferences("streamgurd", MODE_PRIVATE) }
@@ -851,6 +852,10 @@ class MainActivity : Activity() {
                 if (blocking) installPopupGuard()
             }
             override fun onPageCommitVisible(view: WebView?, page: String?) {
+                page?.let {
+                    val scheme = try { URI(it).scheme?.lowercase(Locale.ROOT) } catch (_: Exception) { null }
+                    if (scheme == "http" || scheme == "https") lastCommittedUrl = it
+                }
                 if (blocking) installPopupGuard()
             }
             override fun onPageFinished(view: WebView?, page: String?) {
@@ -876,6 +881,18 @@ class MainActivity : Activity() {
                 val automaticCrossSite = destination.isNotBlank() && !sameSite &&
                     (request.isRedirect || !request.hasGesture())
                 if (blocking && automaticCrossSite) {
+                    view?.stopLoading()
+                    val safePage = lastCommittedUrl
+                    val currentHost = canonicalHost(hostOf(view?.url.orEmpty()))
+                    val safeHost = canonicalHost(hostOf(safePage))
+                    if (safePage.isNotBlank() && currentHost.isNotBlank() &&
+                        safeHost.isNotBlank() && currentHost != safeHost) {
+                        view?.post {
+                            if (canonicalHost(hostOf(view.url.orEmpty())) != safeHost) {
+                                view.loadUrl(safePage)
+                            }
+                        }
+                    }
                     runOnUiThread { toast("Blocked an automatic redirect to $destination") }
                     return true
                 }
@@ -950,6 +967,7 @@ class MainActivity : Activity() {
         val value = normalized(raw)
         if (value == null) { toast("Enter a valid website URL"); return }
         trustedHost = canonicalHost(hostOf(value))
+        lastCommittedUrl = ""
         host = hostOf(value)
         homePanel.visibility = View.GONE
         web.visibility = View.VISIBLE
