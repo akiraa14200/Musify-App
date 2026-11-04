@@ -820,6 +820,39 @@ class MainActivity : Activity() {
         throw IllegalStateException("YouTube music service is temporarily unavailable", lastError)
     }
 
+    private fun pipedSearchRequest(path: String): org.json.JSONArray {
+        var lastError: Exception? = null
+        for (base in pipedApiInstances) {
+            var connection: HttpURLConnection? = null
+            try {
+                connection = (URL(base + path).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 8000
+                    readTimeout = 15000
+                    requestMethod = "GET"
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
+                }
+                val code = connection.responseCode
+                if (code !in 200..299) throw IllegalStateException("Piped HTTP $code")
+                val body = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                when (val parsed = org.json.JSONTokener(body).nextValue()) {
+                    is org.json.JSONArray -> return parsed
+                    is org.json.JSONObject -> {
+                        parsed.optJSONArray("items")?.let { return it }
+                        parsed.optJSONArray("results")?.let { return it }
+                        throw IllegalStateException("Unexpected Piped search response")
+                    }
+                    else -> throw IllegalStateException("Invalid Piped search response")
+                }
+            } catch (e: Exception) {
+                lastError = e
+            } finally {
+                connection?.disconnect()
+            }
+        }
+        throw IllegalStateException("All YouTube search instances failed", lastError)
+    }
+
     private fun searchPipedMusic(raw: String, tracks: MutableList<MusicTrack>, adapter: BaseAdapter, info: TextView) {
         val query = raw.trim()
         if (query.isEmpty()) return
@@ -829,19 +862,22 @@ class MainActivity : Activity() {
         Thread {
             try {
                 val path = "/search?q=" + java.net.URLEncoder.encode(query, "UTF-8") + "&filter=music_songs"
-                val response = pipedRequest(path)
-                val items = response.optJSONArray("items") ?: org.json.JSONArray()
+                val items = pipedSearchRequest(path)
                 val found = mutableListOf<MusicTrack>()
                 val seen = HashSet<String>()
                 for (i in 0 until minOf(items.length(), 50)) {
                     val item = items.optJSONObject(i) ?: continue
                     val watchUrl = item.optString("url")
-                    val id = Regex("(?:v=|/watch/)([A-Za-z0-9_-]{6,})").find(watchUrl)?.groupValues?.getOrNull(1)
-                        ?: item.optString("id").takeIf { it.isNotBlank() } ?: continue
+                    val rawId = item.optString("id").trim()
+                    val id = Regex("(?:[?&]v=|/watch/)([A-Za-z0-9_-]{6,})").find(watchUrl)?.groupValues?.getOrNull(1)
+                        ?: rawId.takeIf { it.matches(Regex("[A-Za-z0-9_-]{6,}")) }
+                        ?: continue
                     val title = item.optString("title").trim()
                     if (title.isBlank() || !seen.add(id)) continue
-                    val artist = item.optString("uploaderName").ifBlank { item.optString("uploader") }
-                    val thumbnail = item.optString("thumbnail")
+                    val artist = item.optString("uploaderName").ifBlank {
+                        item.optString("uploader").ifBlank { item.optString("channel") }
+                    }
+                    val thumbnail = item.optString("thumbnail").ifBlank { item.optString("thumbnailUrl") }
                     val duration = item.optInt("duration", 0)
                     found.add(MusicTrack("yt:$id", title, artist, "YouTube", duration, "", thumbnail))
                 }
@@ -857,7 +893,7 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     if (requestId != musicSearchRequest) return@runOnUiThread
                     musicSearchInFlight = false
-                    info.text = "YouTube music search unavailable. Try again or switch to Saavn."
+                    info.text = "YouTube search is temporarily unavailable. Try again or switch to Saavn."
                 }
             }
         }.start()
