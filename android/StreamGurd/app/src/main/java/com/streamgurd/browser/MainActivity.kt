@@ -44,9 +44,6 @@ class MainActivity : Activity() {
     private lateinit var addressBar: LinearLayout
     private lateinit var actionRow: LinearLayout
     private lateinit var statusRow: LinearLayout
-    private var musicCard: LinearLayout? = null
-    private var musicWeb: WebView? = null
-    private var musicSearch: EditText? = null
 
     private var blocking = true
     private var host = ""
@@ -197,13 +194,12 @@ class MainActivity : Activity() {
         addFeature("＋  Add Website", ::addLink)
         addFeature("☆  Saved Websites", ::showSaved)
         addFeature("☷  Anime & Manga Sites", ::showCatalogue)
-        addFeature("♫  YouTube Music", ::showYoutubeMusic)
         addFeature("⋯  Browser Menu", ::menu)
         addFeature(if (blocking) "盾  Ad & Tracker Protection: On" else "盾  Ad & Tracker Protection: Off") {
             blocking = !blocking
             prefs.edit().putBoolean("blocking", blocking).apply()
             shield.text = if (blocking) "盾 Protected" else "盾 Paused"
-            (actionRow.getChildAt(5) as? TextView)?.text =
+            (actionRow.getChildAt(4) as? TextView)?.text =
                 if (blocking) "盾  Ad & Tracker Protection: On" else "盾  Ad & Tracker Protection: Off"
             web.reload()
         }
@@ -233,7 +229,6 @@ class MainActivity : Activity() {
             topMargin = prefs.getInt("menu_y", dp(72)).coerceAtLeast(0)
         }
         root.addView(topActionsToggle, floatingParams)
-        buildYoutubeMusicCard()
         var downRawX = 0f
         var downRawY = 0f
         var startLeft = 0
@@ -470,91 +465,6 @@ class MainActivity : Activity() {
         dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(Color.LTGRAY)
         render("Anime")
         if(cachedCatalogue("Anime").isEmpty() || cachedCatalogue("Manga").isEmpty()) refreshCatalogue(false)
-    }
-
-    // A compact, dismissible music surface layered over the current browser page.
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun buildYoutubeMusicCard() {
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(10), dp(12), dp(12))
-            background = darkGlassShape(0xF0101218.toInt(), 24)
-            elevation = dp(24).toFloat()
-            visibility = View.GONE
-        }
-        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        header.addView(text("♫  YouTube Music", 16f, Color.WHITE, true),
-            LinearLayout.LayoutParams(0, dp(38), 1f))
-        header.addView(actionButton("✕") { closeYoutubeMusic() }, LinearLayout.LayoutParams(dp(42), dp(38)))
-        val searchRow = LinearLayout(this).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), 0, dp(5), 0)
-            background = darkGlassShape(0xFF242832.toInt(), 14)
-        }
-        val search = EditText(this).apply {
-            hint = "Search songs, artists or playlists"
-            setHintTextColor(Color.LTGRAY)
-            setTextColor(Color.WHITE)
-            textSize = 13f
-            setSingleLine(true)
-            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
-            inputType = android.text.InputType.TYPE_CLASS_TEXT
-            setBackgroundColor(Color.TRANSPARENT)
-            setPadding(dp(5), 0, dp(5), 0)
-            setOnEditorActionListener { _, action, _ ->
-                if (action == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH ||
-                    action == android.view.inputmethod.EditorInfo.IME_ACTION_GO) {
-                    searchYoutubeMusic(text.toString())
-                    true
-                } else false
-            }
-        }
-        searchRow.addView(search, LinearLayout.LayoutParams(0, dp(44), 1f))
-        searchRow.addView(actionButton("SEARCH", true) { searchYoutubeMusic(search.text.toString()) },
-            LinearLayout.LayoutParams(dp(76), dp(34)))
-        val player = WebView(this).apply {
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.mediaPlaybackRequiresUserGesture = false
-            settings.javaScriptCanOpenWindowsAutomatically = false
-            settings.setSupportMultipleWindows(false)
-            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            settings.userAgentString = settings.userAgentString.replace("; wv", "")
-            webChromeClient = WebChromeClient()
-            webViewClient = WebViewClient()
-            setBackgroundColor(Color.BLACK)
-        }
-        card.addView(header, LinearLayout.LayoutParams(-1, dp(40)))
-        card.addView(searchRow, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(7); bottomMargin = dp(9) })
-        card.addView(player, LinearLayout.LayoutParams(-1, 0, 1f))
-        root.addView(card, FrameLayout.LayoutParams(-1, -1).apply {
-            leftMargin = dp(10); rightMargin = dp(10); topMargin = dp(54); bottomMargin = dp(10)
-        })
-        musicCard = card
-        musicWeb = player
-        musicSearch = search
-    }
-
-    private fun showYoutubeMusic() {
-        val card = musicCard ?: return
-        card.visibility = View.VISIBLE
-        root.findViewWithTag<View>("top-actions-panel")?.visibility = View.GONE
-        musicSearch?.requestFocus()
-        if (musicWeb?.url.isNullOrBlank()) {
-            musicWeb?.loadUrl("https://music.youtube.com/")
-        }
-    }
-
-    private fun searchYoutubeMusic(query: String) {
-        val q = query.trim()
-        if (q.isEmpty()) { toast("Enter a song, artist or playlist"); return }
-        val encoded = java.net.URLEncoder.encode(q, "UTF-8")
-        musicWeb?.loadUrl("https://m.youtube.com/results?search_query=$encoded")
-    }
-
-    private fun closeYoutubeMusic() {
-        musicCard?.visibility = View.GONE
-        musicWeb?.onPause()
     }
 
     private fun featureChip(label: String) = TextView(this).apply {
@@ -818,22 +728,18 @@ class MainActivity : Activity() {
     }
     override fun onPause() {
         web.onPause()
-        musicWeb?.onPause()
         mainHandler.removeCallbacks(catalogueRefresh)
         super.onPause()
     }
     override fun onResume() {
         super.onResume()
         web.onResume()
-        musicWeb?.onResume()
         refreshCatalogue(false)
         mainHandler.removeCallbacks(catalogueRefresh)
         mainHandler.postDelayed(catalogueRefresh, 15 * 60 * 1000L)
     }
     override fun onDestroy() {
         mainHandler.removeCallbacks(catalogueRefresh)
-        musicWeb?.destroy()
-        musicWeb = null
         web.destroy()
         super.onDestroy()
     }
