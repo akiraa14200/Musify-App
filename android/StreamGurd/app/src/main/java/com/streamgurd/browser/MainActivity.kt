@@ -507,6 +507,7 @@ class MainActivity : Activity() {
                 return row
             }
         }
+        panel.addView(actionButton("SEARCH JIOSAAVN", true) { searchJioSaavn(query.text.toString(), tracks, list, info) }, LinearLayout.LayoutParams(-1, dp(38)).apply { bottomMargin = dp(5) })
         panel.addView(list, LinearLayout.LayoutParams(-1, dp(220)))
         val statusText = text("Not playing", 11f, Color.LTGRAY).apply { setPadding(0, dp(8), 0, dp(5)) }
         musicStatus = statusText
