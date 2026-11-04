@@ -586,7 +586,6 @@ class MainActivity : Activity() {
               if (window.__strawhatPopupGuard) return;
               window.__strawhatPopupGuard = true;
               try {
-                const blocked = ${JSON.stringify([])};
                 const nativeOpen = window.open;
                 window.open = function(url) { return null; };
                 window.showModalDialog = function() { return null; };
