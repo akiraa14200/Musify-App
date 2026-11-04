@@ -64,8 +64,14 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         blocking = prefs.getBoolean("blocking", true)
-        window.statusBarColor = Color.rgb(9,13,24)
-        window.navigationBarColor = Color.rgb(9,13,24)
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            window.setDecorFitsSystemWindows(false)
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_LAYOUT_STABLE or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION)
+        }
         buildUi()
         configureWeb()
         prefs.getString("last_url", null)?.let { open(it) }
@@ -87,33 +93,36 @@ class MainActivity : Activity() {
         val accent = Color.rgb(171, 198, 255)
 
         root = FrameLayout(this).apply { setBackgroundColor(bg) }
-        root.setOnApplyWindowInsetsListener { view, insets ->
+        root.setOnApplyWindowInsetsListener { _, insets ->
+            val top: Int
+            val bottom: Int
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
                 val bars = insets.getInsets(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
-                view.setPadding(0, bars.top, 0, bars.bottom)
+                top = bars.top; bottom = bars.bottom
             } else {
                 @Suppress("DEPRECATION")
-                view.setPadding(0, insets.systemWindowInsetTop, 0, insets.systemWindowInsetBottom)
+                run { top = insets.systemWindowInsetTop; bottom = insets.systemWindowInsetBottom }
             }
+            contentLayout.setPadding(dp(10), top + dp(5), dp(10), bottom + dp(4))
             insets
         }
         contentLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(10), dp(5), dp(10), dp(4))
-            setBackgroundColor(bg)
+            setBackgroundColor(Color.TRANSPARENT)
         }
         root.addView(contentLayout, FrameLayout.LayoutParams(-1, -1))
 
         headerBar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(2), 0, dp(2), dp(3)) }
         val brandMark = TextView(this).apply {
-            text = "S"; textSize = 17f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
+            text = "☠"; textSize = 19f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
             setTextColor(Color.rgb(9, 15, 29))
             background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(190, 211, 255), Color.rgb(115, 151, 220))).apply { cornerRadius = dp(11).toFloat() }
         }
         headerBar.addView(brandMark, LinearLayout.LayoutParams(dp(34), dp(34)))
         val brandText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(8), 0, 0, 0) }
-        brandText.addView(text("StreamGurd", 16f, Color.WHITE, true))
-        brandText.addView(text("PRIVATE BROWSING", 8f, muted, true))
+        brandText.addView(text("Strawhat Pirate", 16f, Color.WHITE, true))
+        brandText.addView(text("THE GRAND LINE BROWSER", 8f, muted, true))
         headerBar.addView(brandText)
         headerBar.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         lateinit var shield: TextView
@@ -131,7 +140,7 @@ class MainActivity : Activity() {
 
         addressBar = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL; setPadding(dp(9), 0, dp(4), 0)
-            background = GradientDrawable().apply { setColor(surface); cornerRadius = dp(13).toFloat(); setStroke(dp(1), Color.rgb(42, 56, 82)) }
+            background = glassShape(0xB82A3B55.toInt(), 13)
         }
         addressBar.addView(text("⌕", 20f, accent, true).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(26), dp(40)))
         url = EditText(this).apply {
@@ -163,10 +172,10 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(18), dp(18), dp(18), dp(18))
             background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(24, 37, 61), Color.rgb(14, 21, 36))).apply { cornerRadius = dp(24).toFloat(); setStroke(dp(1), Color.rgb(42, 59, 88)) }
         }
-        val heroIcon = TextView(this).apply { text = "◈"; textSize = 34f; gravity = Gravity.CENTER; setTextColor(accent); background = GradientDrawable().apply { setColor(Color.rgb(35, 53, 83)); cornerRadius = dp(20).toFloat() } }
+        val heroIcon = TextView(this).apply { text = "🏴‍☠️"; textSize = 34f; gravity = Gravity.CENTER; setTextColor(accent); background = GradientDrawable().apply { setColor(Color.rgb(35, 53, 83)); cornerRadius = dp(20).toFloat() } }
         homePanel.addView(heroIcon, LinearLayout.LayoutParams(dp(62), dp(62)).apply { gravity = Gravity.CENTER; bottomMargin = dp(14) })
-        homePanel.addView(text("Browse with more control.", 21f, Color.WHITE, true).apply { gravity = Gravity.CENTER })
-        homePanel.addView(text("Your browser, your choice. StreamGurd blocks known ad and tracker domains and helps stop unwanted site redirects.", 12f, Color.rgb(164, 180, 207)).apply { gravity = Gravity.CENTER; setLineSpacing(dp(3).toFloat(), 1f); setPadding(dp(4), dp(9), dp(4), dp(16)) })
+        homePanel.addView(text("Set sail across the web.", 21f, Color.WHITE, true).apply { gravity = Gravity.CENTER })
+        homePanel.addView(text("Your browser, your choice. Strawhat Pirate filters known ad and tracker domains and helps stop unwanted redirects.", 12f, Color.rgb(164, 180, 207)).apply { gravity = Gravity.CENTER; setLineSpacing(dp(3).toFloat(), 1f); setPadding(dp(4), dp(9), dp(4), dp(16)) })
         val featureRow = LinearLayout(this).apply { gravity = Gravity.CENTER }
         featureRow.addView(featureChip("◉ Tracker filter"), LinearLayout.LayoutParams(0, dp(34), 1f).apply { rightMargin = dp(4) })
         featureRow.addView(featureChip("↗ Redirect guard"), LinearLayout.LayoutParams(0, dp(34), 1f).apply { leftMargin = dp(4) })
@@ -175,8 +184,9 @@ class MainActivity : Activity() {
         contentLayout.addView(homePanel, LinearLayout.LayoutParams(-1, 0, 1f))
 
         web = WebView(this)
-        contentLayout.addView(web, LinearLayout.LayoutParams(-1, 0, 1f))
-        browserBar = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, dp(3), 0, 0); background = shape(Color.rgb(12, 19, 32), 12) }
+        root.addView(web, 0, FrameLayout.LayoutParams(-1, -1))
+        web.visibility = View.GONE
+        browserBar = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, dp(3), 0, 0); background = glassShape(0xCC17243A.toInt(), 18) }
         browserBar.addView(actionButton("‹ Back") { if (web.canGoBack()) web.goBack() }, LinearLayout.LayoutParams(0, dp(34), 1f).apply { rightMargin = dp(3) })
         browserBar.addView(actionButton("Forward ›") { if (web.canGoForward()) web.goForward() }, LinearLayout.LayoutParams(0, dp(34), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
         browserBar.addView(actionButton("↻ Reload") { web.reload() }, LinearLayout.LayoutParams(0, dp(34), 1f).apply { leftMargin = dp(3) })
@@ -495,8 +505,8 @@ class MainActivity : Activity() {
         prefs.edit().putString("history",list.take(80).joinToString("\n")).apply()
     }
     private fun menu() {
-        val choices = arrayOf(if(blocking) "Pause ad blocking" else "Enable ad blocking","Refresh","Back","Forward","Save current website","History","Clear cookies and cache","About")
-        AlertDialog.Builder(this).setTitle("StreamGurd").setItems(choices) { _,i ->
+        val choices = arrayOf(if(blocking) "Pause ad blocking" else "Enable ad blocking","Refresh","Back","Forward","Save current website","History","Clear cookies and cache","About Strawhat Pirate","Privacy policy","Terms of use")
+        AlertDialog.Builder(this).setTitle("Strawhat Pirate").setItems(choices) { _,i ->
             when(i) {
                 0 -> { blocking = !blocking; prefs.edit().putBoolean("blocking",blocking).apply(); web.reload() }
                 1 -> web.reload()
@@ -505,10 +515,31 @@ class MainActivity : Activity() {
                 4 -> web.url?.let { val list = (listOf(it)+saved()).distinct(); prefs.edit().putString("saved",list.joinToString("\n")).apply(); toast("Website saved") }
                 5 -> { val h = prefs.getString("history","").orEmpty().split("\n").filter { it.isNotBlank() }; if(h.isNotEmpty()) AlertDialog.Builder(this).setTitle("History").setItems(h.toTypedArray()) { _,n -> open(h[n]) }.show() else toast("No history") }
                 6 -> { CookieManager.getInstance().removeAllCookies(null); web.clearCache(true); web.clearHistory(); toast("Browser data cleared") }
-                7 -> AlertDialog.Builder(this).setTitle("About StreamGurd").setMessage("A local-first Android browser with domain-based ad and tracker blocking. It cannot guarantee removal of first-party or in-stream ads.").setPositiveButton("OK",null).show()
+                7 -> showAbout()
+                8 -> showPolicy("Privacy policy", "Strawhat Pirate stores bookmarks, browsing history, catalogue cache and your last opened page locally on this device. Website requests go directly to the sites you visit. The app does not operate an account system or sell personal data. Websites may use their own cookies and tracking technologies. Clearing browser data removes local cookies, cache and history.")
+                9 -> showPolicy("Terms of use", "Use Strawhat Pirate lawfully and respect each website's terms, copyright and access rules. You are responsible for the websites and content you choose to visit. The built-in filter blocks selected known ad and tracker domains only; it does not guarantee complete ad removal, privacy, security or uninterrupted access. The app is provided as-is. Do not use it to bypass access controls or infringe anyone's rights.")
             }
         }.show()
     }
+    private fun glassShape(color: Int, radius: Int) = GradientDrawable().apply {
+        setColor(color)
+        cornerRadius = dp(radius).toFloat()
+        setStroke(dp(1), 0x667F9FC8)
+    }
+
+    private fun showAbout() {
+        AlertDialog.Builder(this).setTitle("🏴‍☠️ Strawhat Pirate")
+            .setMessage("A local-first Android browser for exploring the web with a built-in site catalogue, saved links, browsing history and a lightweight domain filter.\n\nMade for personal browsing. Anime and Manga catalogues are supplied by the linked public spreadsheet.\n\nAd filtering is domain-based and cannot guarantee removal of first-party or in-stream ads.")
+            .setPositiveButton("Privacy policy") { _, _ -> showPolicy("Privacy policy", "Bookmarks, history, catalogue cache and the last page are stored locally on this device. Website requests are sent to the websites you open. The app has no account system and does not sell personal data. Sites may set their own cookies. Clear browser data from the menu to remove local cookies, cache and history.") }
+            .setNeutralButton("Terms") { _, _ -> showPolicy("Terms of use", "Use this browser lawfully. Respect website terms, copyright and access restrictions. You are responsible for your browsing and the content you access. Filtering is best-effort only and does not guarantee privacy, security, complete ad removal or uninterrupted access. The app is provided as-is.") }
+            .setNegativeButton("Close", null).show()
+    }
+
+    private fun showPolicy(title: String, message: String) {
+        AlertDialog.Builder(this).setTitle(title).setMessage(message)
+            .setPositiveButton("Got it", null).show()
+    }
+
     private fun exitFullscreen() {
         fullView?.let { (it.parent as? ViewGroup)?.removeView(it) }
         fullView = null; fullCallback?.onCustomViewHidden(); fullCallback = null
