@@ -1,3 +1,4 @@
+<!-- Strawhat Pirate launcher uses adaptive and legacy mipmap resources. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <application android:label="Strawhat Pirate" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:theme="@style/AppTheme" android:usesCleartextTraffic="false" android:allowBackup="false">
