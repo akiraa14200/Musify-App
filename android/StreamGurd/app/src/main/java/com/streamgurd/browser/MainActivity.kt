@@ -15,8 +15,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
 import android.webkit.*
-import android.media.AudioAttributes
-import android.media.MediaPlayer
 import android.widget.*
 import java.net.URI
 import java.net.HttpURLConnection
@@ -25,8 +23,18 @@ import java.util.Locale
 
 class MainActivity : Activity() {
     private data class SiteEntry(val name: String, val url: String, val category: String)
-    private data class MusicTrack(val id: String, val title: String, val artist: String, val album: String, val duration: Int, val stream: String)
-    private var musicPlayer: MediaPlayer? = null
+    private data class MusicTrack(val id: String, val title: String, val artist: String, val album: String, val duration: Int, val stream: String, val image: String)
+    private var musicPlayer: androidx.media3.exoplayer.ExoPlayer? = null
+    private var musicCoverView: ImageView? = null
+    private var musicSeekBar: SeekBar? = null
+    private var musicElapsedView: TextView? = null
+    private var musicDurationView: TextView? = null
+    private var musicResultsAdapter: BaseAdapter? = null
+    private var musicSearchInFlight = false
+    private var musicSearchRequest = 0
+    private var seekingMusic = false
+    private val musicProgressHandler = Handler(Looper.getMainLooper())
+    private val musicProgressRunnable = Runnable { updateMusicProgress() }
     private var musicStatus: TextView? = null
     private var musicPlayButton: TextView? = null
     private var currentMusic: MusicTrack? = null
@@ -478,137 +486,266 @@ class MainActivity : Activity() {
     private fun showMusicPlayer() {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(12), dp(16), dp(10))
-            background = darkGlassShape(0xF0181B22.toInt(), 20)
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            background = darkGlassShape(0xF0181B22.toInt(), 22)
         }
-        val title = text("♫  JioSaavn Music", 17f, Color.WHITE, true)
-        panel.addView(title)
+        panel.addView(text("STRAW HAT RADIO", 10f, Color.rgb(173, 190, 215), true))
+        panel.addView(text("Music for the voyage", 20f, Color.WHITE, true).apply { setPadding(0, dp(3), 0, dp(10)) })
+        val searchRow = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            background = shape(Color.rgb(39, 44, 54), 14)
+            setPadding(dp(10), 0, dp(5), 0)
+        }
         val query = EditText(this).apply {
-            hint = "Search songs or artists"; setSingleLine(true)
+            hint = "Songs, artists, albums…"; setSingleLine(true)
             setTextColor(Color.WHITE); setHintTextColor(Color.LTGRAY)
-            background = shape(Color.rgb(42, 45, 52), 12); textSize = 13f
+            textSize = 14f; background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
         }
-        panel.addView(query, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(8) })
-        val info = text("Search JioSaavn to find songs", 11f, Color.LTGRAY).apply { setPadding(0, dp(8), 0, dp(4)) }
-        panel.addView(info)
+        searchRow.addView(query, LinearLayout.LayoutParams(0, dp(48), 1f))
         val tracks = mutableListOf<MusicTrack>()
-        val list = ListView(this)
-        list.dividerHeight = dp(1)
-        list.adapter = object : BaseAdapter() {
+        val info = text("Search JioSaavn's catalogue", 11f, Color.LTGRAY).apply { setPadding(dp(2), dp(10), 0, dp(5)) }
+        val list = ListView(this).apply {
+            divider = android.graphics.drawable.ColorDrawable(0x303FFFFFF)
+            dividerHeight = dp(1); cacheColorHint = Color.TRANSPARENT
+            background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+        }
+        val adapter = object : BaseAdapter() {
             override fun getCount() = tracks.size
             override fun getItem(position: Int) = tracks[position]
-            override fun getItemId(position: Int) = position.toLong()
+            override fun getItemId(position: Int) = tracks[position].id.hashCode().toLong()
             override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
-                val row = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), dp(8), dp(8), dp(8)) }
                 val track = tracks[position]
+                val row = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL; setPadding(dp(10), dp(9), dp(8), dp(9))
+                    background = if (currentMusic?.id == track.id) shape(0x553E526D, 10) else android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+                }
                 row.addView(text(track.title, 13f, Color.WHITE, true))
-                row.addView(text(track.artist, 10f, Color.LTGRAY))
+                row.addView(text(track.artist.ifBlank { "Unknown artist" } + if (track.album.isNotBlank()) "  ·  " + track.album else "", 10f, Color.rgb(181, 190, 204)))
                 return row
             }
         }
-        panel.addView(actionButton("SEARCH JIOSAAVN", true) { searchJioSaavn(query.text.toString(), tracks, list, info) }, LinearLayout.LayoutParams(-1, dp(38)).apply { bottomMargin = dp(5) })
-        panel.addView(list, LinearLayout.LayoutParams(-1, dp(220)))
-        val statusText = text("Not playing", 11f, Color.LTGRAY).apply { setPadding(0, dp(8), 0, dp(5)) }
-        musicStatus = statusText
-        panel.addView(statusText)
-        val controls = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        val play = actionButton("Ⅱ  PAUSE / RESUME", true) { toggleMusicPlayback() }
-        musicPlayButton = play
-        controls.addView(play, LinearLayout.LayoutParams(0, dp(40), 1f))
-        controls.addView(actionButton("STOP") { stopMusic() }, LinearLayout.LayoutParams(dp(75), dp(40)).apply { leftMargin = dp(7) })
-        panel.addView(controls)
-        val dialog = AlertDialog.Builder(this).setTitle("Music Player").setView(panel).setNegativeButton("Close", null).create()
-        list.setOnItemClickListener { _, _, position, _ -> playJioSaavnTrack(tracks[position]) }
-        fun search() { searchJioSaavn(query.text.toString(), tracks, list, info) }
-        query.setOnEditorActionListener { _, _, _ -> search(); true }
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(Color.LTGRAY)
+        list.adapter = adapter
+        searchRow.addView(actionButton("SEARCH", true) {
+            searchJioSaavn(query.text.toString(), tracks, adapter, info)
+        }, LinearLayout.LayoutParams(dp(86), dp(38)))
+        panel.addView(searchRow)
+        panel.addView(info)
+        panel.addView(list, LinearLayout.LayoutParams(-1, dp(190)))
+        panel.addView(View(this).apply {
+            setBackgroundColor(0x44FFFFFF)
+            layoutParams = LinearLayout.LayoutParams(-1, dp(1)).apply { topMargin = dp(8); bottomMargin = dp(10) }
+        })
+        val now = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val cover = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = shape(Color.rgb(47, 55, 68), 14)
+            setImageResource(android.R.drawable.ic_media_play)
         }
+        now.addView(cover, LinearLayout.LayoutParams(dp(62), dp(62)))
+        val nowText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, 0, 0) }
+        nowText.addView(text("NOW PLAYING", 9f, Color.rgb(173, 190, 215), true))
+        val statusText = text("Choose a track to begin", 12f, Color.WHITE, true).apply { maxLines = 2 }
+        musicStatus = statusText
+        nowText.addView(statusText)
+        now.addView(nowText, LinearLayout.LayoutParams(0, -2, 1f))
+        panel.addView(now)
+        val seek = SeekBar(this).apply { max = 1000; progress = 0 }
+        panel.addView(seek, LinearLayout.LayoutParams(-1, dp(28)).apply { topMargin = dp(5) })
+        val timeRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val elapsed = text("0:00", 10f, Color.LTGRAY)
+        val total = text("0:00", 10f, Color.LTGRAY)
+        timeRow.addView(elapsed); timeRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f)); timeRow.addView(total)
+        panel.addView(timeRow)
+        val controls = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, dp(9), 0, 0) }
+        controls.addView(actionButton("Ⅱ", false) { toggleMusicPlayback() }, LinearLayout.LayoutParams(dp(54), dp(44)).apply { rightMargin = dp(8) })
+        val play = actionButton("▶  PLAY", true) { toggleMusicPlayback() }
+        musicPlayButton = play
+        controls.addView(play, LinearLayout.LayoutParams(0, dp(44), 1f))
+        controls.addView(actionButton("■", false) { stopMusic() }, LinearLayout.LayoutParams(dp(54), dp(44)).apply { leftMargin = dp(8) })
+        panel.addView(controls)
+        val dialog = AlertDialog.Builder(this).setView(panel).setNegativeButton("CLOSE", null).create()
+        list.setOnItemClickListener { _, _, position, _ -> playJioSaavnTrack(tracks[position]) }
+        query.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH || actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                searchJioSaavn(query.text.toString(), tracks, adapter, info); true
+            } else false
+        }
+        dialog.setOnDismissListener { musicStatus = null; musicPlayButton = null }
+        dialog.setOnShowListener { dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(Color.LTGRAY) }
         dialog.show()
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.90f).toInt(), -2)
-        // Add an explicit search action below the query field.
-        query.setOnLongClickListener { search(); true }
-        query.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
-        query.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) Unit }
-        query.setOnEditorActionListener { _, _, _ -> search(); true }
+        dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.92f).toInt(), -2)
+        musicCoverView = cover; musicSeekBar = seek
+        musicElapsedView = elapsed; musicDurationView = total
+        musicResultsAdapter = adapter
+        seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {}
+            override fun onStartTrackingTouch(bar: SeekBar?) { seekingMusic = true }
+            override fun onStopTrackingTouch(bar: SeekBar?) {
+                seekingMusic = false
+                musicPlayer?.let { if (it.duration > 0) it.seekTo((it.duration * (bar?.progress ?: 0) / 1000f).toLong()) }
+            }
+        })
+        updateMusicProgress()
     }
 
-    private fun searchJioSaavn(raw: String, tracks: MutableList<MusicTrack>, list: ListView, info: TextView) {
+    private fun searchJioSaavn(raw: String, tracks: MutableList<MusicTrack>, adapter: BaseAdapter, info: TextView) {
         val q = raw.trim()
-        if (q.isEmpty()) { info.text = "Enter a song or artist"; return }
-        info.text = "Searching…"
+        if (q.isEmpty()) { info.text = "Enter a song, artist or album"; return }
+        if (musicSearchInFlight) return
+        musicSearchInFlight = true
+        info.text = "Searching JioSaavn…"
+        val requestId = ++musicSearchRequest
         Thread {
+            var connection: HttpURLConnection? = null
             try {
                 val endpoint = URL("https://saavnapi-nine.vercel.app/result?query=" + java.net.URLEncoder.encode(q, "UTF-8"))
-                val connection = endpoint.openConnection() as HttpURLConnection
-                connection.connectTimeout = 12000; connection.readTimeout = 15000
-                connection.setRequestProperty("User-Agent", "StrawhatPirate/1.0")
-                val body = try {
-                    if (connection.responseCode !in 200..299) throw IllegalStateException("HTTP " + connection.responseCode)
-                    connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                } finally { connection.disconnect() }
+                connection = (endpoint.openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 10000; readTimeout = 18000; requestMethod = "GET"; useCaches = true
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("User-Agent", "StrawhatPirate/1.1 (Android)")
+                }
+                val code = connection.responseCode
+                if (code !in 200..299) throw IllegalStateException("Service returned HTTP $code")
+                val body = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                if (body.isBlank()) throw IllegalStateException("Empty response")
                 val parsed = org.json.JSONTokener(body).nextValue()
-                val array = if (parsed is org.json.JSONArray) parsed else if (parsed is org.json.JSONObject) parsed.optJSONArray("results") ?: org.json.JSONArray() else org.json.JSONArray()
+                val array = when (parsed) {
+                    is org.json.JSONArray -> parsed
+                    is org.json.JSONObject -> parsed.optJSONArray("results") ?: parsed.optJSONArray("data")
+                        ?: parsed.optJSONObject("data")?.optJSONArray("results") ?: org.json.JSONArray()
+                    else -> org.json.JSONArray()
+                }
                 val found = mutableListOf<MusicTrack>()
-                for (i in 0 until minOf(array.length(), 40)) {
+                val seen = HashSet<String>()
+                for (i in 0 until minOf(array.length(), 60)) {
                     val item = array.optJSONObject(i) ?: continue
-                    val id = item.optString("id")
-                    val name = item.optString("song", item.optString("name"))
-                    val stream = item.optString("media_url").ifBlank { item.optString("media_preview_url") }
-                    if (id.isBlank() || name.isBlank() || stream.isBlank()) continue
-                    found.add(MusicTrack(id, name, item.optString("primary_artists", item.optString("singers")), item.optString("album"), item.optString("duration").toIntOrNull() ?: 0, stream))
+                    val id = item.optString("id").trim()
+                    val name = item.optString("song").ifBlank { item.optString("name") }.trim()
+                    val artists = item.optString("primary_artists").ifBlank {
+                        item.optString("singers").ifBlank { item.optString("artist") }
+                    }.trim()
+                    val album = item.optString("album").trim()
+                    val stream = item.optString("media_url").ifBlank {
+                        item.optString("media_preview_url").ifBlank { item.optString("url") }
+                    }.trim()
+                    val image = item.optString("image").ifBlank { item.optString("artwork") }.trim()
+                    val duration = item.optString("duration").toIntOrNull() ?: item.optInt("duration", 0)
+                    if (name.isBlank() || stream.isBlank()) continue
+                    val key = if (id.isNotBlank()) id else stream
+                    if (!seen.add(key)) continue
+                    found.add(MusicTrack(key, name, artists, album, duration, stream, image))
                 }
                 runOnUiThread {
-                    tracks.clear(); tracks.addAll(found)
-                    (list.adapter as? BaseAdapter)?.notifyDataSetChanged()
-                    info.text = if (found.isEmpty()) "No playable songs found" else found.size.toString() + " songs · Tap one to play"
+                    if (requestId != musicSearchRequest) return@runOnUiThread
+                    musicSearchInFlight = false; tracks.clear(); tracks.addAll(found); adapter.notifyDataSetChanged()
+                    info.text = if (found.isEmpty()) "No playable results. Try another spelling." else "${found.size} playable tracks · Tap a result"
                 }
             } catch (e: Exception) {
-                runOnUiThread { info.text = "Search failed: " + (e.message ?: "Try again") }
-            }
+                runOnUiThread {
+                    if (requestId != musicSearchRequest) return@runOnUiThread
+                    musicSearchInFlight = false
+                    info.text = "Search unavailable · ${e.message ?: "Please retry"}"
+                }
+            } finally { connection?.disconnect() }
         }.start()
     }
 
     private fun playJioSaavnTrack(track: MusicTrack) {
+        stopMusic(updateStatus = false)
+        currentMusic = track
+        musicStatus?.text = "Connecting · ${track.title}"
+        musicPlayButton?.text = "LOADING…"
+        musicResultsAdapter?.notifyDataSetChanged()
+        if (track.image.isNotBlank()) loadMusicArtwork(track.image)
         try {
-            musicPlayer?.release()
-            currentMusic = track
-            musicStatus?.text = "Loading · " + track.title
-            musicPlayer = MediaPlayer().apply {
-                setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
-                setDataSource(track.stream)
-                setOnPreparedListener { player ->
-                    player.start()
-                    musicStatus?.text = "♫ " + track.title + " — " + track.artist
-                    musicPlayButton?.text = "Ⅱ  PAUSE"
+            val player = androidx.media3.exoplayer.ExoPlayer.Builder(this)
+                .setLoadControl(androidx.media3.exoplayer.DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(15000, 50000, 1500, 4000).build())
+                .build()
+            musicPlayer = player
+            player.addListener(object : androidx.media3.common.Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    when (state) {
+                        androidx.media3.common.Player.STATE_BUFFERING -> {
+                            musicStatus?.text = "Buffering · ${track.title}"; musicPlayButton?.text = "BUFFERING…"
+                        }
+                        androidx.media3.common.Player.STATE_READY -> {
+                            musicStatus?.text = track.title + " · " + track.artist
+                            musicPlayButton?.text = if (player.playWhenReady) "Ⅱ  PAUSE" else "▶  PLAY"
+                            musicDurationView?.text = formatMusicTime(player.duration)
+                        }
+                        androidx.media3.common.Player.STATE_ENDED -> {
+                            musicStatus?.text = "Finished · ${track.title}"; musicPlayButton?.text = "▶  REPLAY"
+                        }
+                    }
                 }
-                setOnCompletionListener { musicStatus?.text = "Finished · " + track.title; musicPlayButton?.text = "▶  PLAY" }
-                setOnErrorListener { _, what, extra -> musicStatus?.text = "Playback error (" + what + "/" + extra + ")"; true }
-                prepareAsync()
-            }
-        } catch (e: Exception) { musicStatus?.text = "Unable to play: " + (e.message ?: "stream error") }
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    musicPlayButton?.text = if (isPlaying) "Ⅱ  PAUSE" else "▶  PLAY"
+                }
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    musicStatus?.text = "Stream failed · Try another result"; musicPlayButton?.text = "▶  RETRY"
+                }
+            })
+            player.setMediaItem(androidx.media3.common.MediaItem.fromUri(track.stream))
+            player.prepare(); player.playWhenReady = true
+        } catch (e: Exception) {
+            musicStatus?.text = "Unable to start stream · ${e.message ?: "Unknown error"}"
+            musicPlayButton?.text = "▶  RETRY"
+        }
     }
 
     private fun toggleMusicPlayback() {
-        val player = musicPlayer ?: run { toast("Choose a song first"); return }
-        try {
-            if (player.isPlaying) {
-                player.pause(); musicPlayButton?.text = "▶  RESUME"
-                musicStatus?.text = "Paused · " + (currentMusic?.title ?: "")
-            } else {
-                player.start(); musicPlayButton?.text = "Ⅱ  PAUSE"
-                musicStatus?.text = "♫ " + (currentMusic?.title ?: "")
-            }
-        } catch (_: Exception) { toast("Player is preparing the song") }
+        val player = musicPlayer ?: run {
+            currentMusic?.let { playJioSaavnTrack(it) } ?: toast("Choose a song first")
+            return
+        }
+        if (player.playbackState == androidx.media3.common.Player.STATE_IDLE || player.playbackState == androidx.media3.common.Player.STATE_ENDED) {
+            player.seekTo(0); player.play()
+        } else if (player.isPlaying) player.pause() else player.play()
     }
 
-    private fun stopMusic() {
-        try { musicPlayer?.stop() } catch (_: Exception) { }
-        musicPlayer?.release(); musicPlayer = null; currentMusic = null
-        musicStatus?.text = "Playback stopped"
-        musicPlayButton?.text = "Ⅱ  PAUSE / RESUME"
+    private fun stopMusic(updateStatus: Boolean = true) {
+        musicProgressHandler.removeCallbacks(musicProgressRunnable)
+        musicPlayer?.release(); musicPlayer = null
+        if (updateStatus) {
+            currentMusic = null; musicStatus?.text = "Playback stopped"; musicPlayButton?.text = "▶  PLAY"
+            musicSeekBar?.progress = 0; musicElapsedView?.text = "0:00"; musicDurationView?.text = "0:00"
+            musicCoverView?.setImageResource(android.R.drawable.ic_media_play)
+        }
+    }
+
+    private fun loadMusicArtwork(rawUrl: String) {
+        Thread {
+            try {
+                val conn = (URL(rawUrl).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 7000; readTimeout = 9000; instanceFollowRedirects = true
+                    setRequestProperty("User-Agent", "StrawhatPirate/1.1")
+                }
+                val bitmap = try { conn.inputStream.use { android.graphics.BitmapFactory.decodeStream(it) } } finally { conn.disconnect() }
+                if (bitmap != null) runOnUiThread { musicCoverView?.setImageBitmap(bitmap) }
+            } catch (_: Exception) { }
+        }.start()
+    }
+
+    private fun formatMusicTime(ms: Long): String {
+        if (ms < 0) return "0:00"
+        val seconds = ms / 1000
+        return "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
+    }
+
+    private fun updateMusicProgress() {
+        val player = musicPlayer
+        if (player != null && !seekingMusic) {
+            val duration = player.duration; val position = player.currentPosition
+            if (duration > 0) {
+                musicSeekBar?.progress = ((position.toDouble() / duration) * 1000).toInt().coerceIn(0, 1000)
+                musicDurationView?.text = formatMusicTime(duration)
+            }
+            musicElapsedView?.text = formatMusicTime(position)
+        }
+        if (musicPlayer != null) musicProgressHandler.postDelayed(musicProgressRunnable, 500)
     }
 
     private fun featureChip(label: String) = TextView(this).apply {
@@ -884,7 +1021,7 @@ class MainActivity : Activity() {
     }
     override fun onDestroy() {
         mainHandler.removeCallbacks(catalogueRefresh)
-        musicPlayer?.release(); musicPlayer = null
+        stopMusic(updateStatus = false)
         web.destroy()
         super.onDestroy()
     }
