@@ -506,7 +506,7 @@ class MainActivity : Activity() {
         val tracks = mutableListOf<MusicTrack>()
         val info = text("Search JioSaavn's catalogue", 11f, Color.LTGRAY).apply { setPadding(dp(2), dp(10), 0, dp(5)) }
         val list = ListView(this).apply {
-            divider = android.graphics.drawable.ColorDrawable(0x303FFFFFF)
+            divider = android.graphics.drawable.ColorDrawable(0x30FFFFFF.toInt())
             dividerHeight = dp(1); cacheColorHint = Color.TRANSPARENT
             background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
         }
