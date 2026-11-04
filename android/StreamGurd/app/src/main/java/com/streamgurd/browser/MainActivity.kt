@@ -862,20 +862,26 @@ class MainActivity : Activity() {
                 val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return true
                 if (scheme !in listOf("http", "https")) return true
 
+                // Only apply navigation policy to the top-level document. Images,
+                // scripts, API calls, fonts and media from other domains must keep working.
+                if (!request.isForMainFrame) return false
+
                 val destination = canonicalHost(uri.host.orEmpty())
                 val trusted = canonicalHost(trustedHost)
                 val sameSite = trusted.isNotBlank() &&
                     (destination == trusted || destination.endsWith(".$trusted"))
 
-                // A deliberate tap may open another site. Automatic cross-site
-                // redirects (HTTP redirects or script/meta navigation) are stopped.
-                if (blocking && destination.isNotBlank() && !sameSite &&
-                    (request.isRedirect || !request.hasGesture())) {
-                    runOnUiThread { toast("Blocked an automatic redirect") }
+                // Block cross-site HTTP redirect chains and script/meta navigations
+                // without a fresh user gesture. Same-site canonical redirects remain valid.
+                val automaticCrossSite = destination.isNotBlank() && !sameSite &&
+                    (request.isRedirect || !request.hasGesture())
+                if (blocking && automaticCrossSite) {
+                    runOnUiThread { toast("Blocked an automatic redirect to $destination") }
                     return true
                 }
 
-                // A user-initiated navigation becomes the new trusted browsing origin.
+                // Explicit user navigation is allowed and establishes the next
+                // trusted origin. The following automatic cross-site hop is still blocked.
                 if (request.hasGesture() && destination.isNotBlank()) {
                     trustedHost = destination
                 }
@@ -887,14 +893,9 @@ class MainActivity : Activity() {
                 val uri = try { URI(url ?: return true) } catch (_: Exception) { return true }
                 val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return true
                 if (scheme !in listOf("http", "https")) return true
-                val destination = canonicalHost(uri.host.orEmpty())
-                val trusted = canonicalHost(trustedHost)
-                val sameSite = trusted.isNotBlank() &&
-                    (destination == trusted || destination.endsWith(".$trusted"))
-                if (blocking && destination.isNotBlank() && !sameSite) {
-                    toast("Blocked an automatic redirect")
-                    return true
-                }
+                // The legacy callback does not expose gesture or redirect metadata.
+                // Keep it conservative for compatibility: reject non-web schemes above,
+                // but let HTTP(S) navigations proceed rather than breaking tapped links.
                 return false
             }
         }
