@@ -528,24 +528,40 @@ class MainActivity : Activity() {
         dialogRoot.addView(searchRow, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(12) })
 
         val filterRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        val filter = actionButton("ALL", true) {}
-        filterRow.addView(filter, LinearLayout.LayoutParams(dp(76), dp(36)).apply { rightMargin = dp(8) })
-        filterRow.addView(actionButton("SONGS", false) { }, LinearLayout.LayoutParams(dp(86), dp(36)))
+        var musicSource = "saavn"
+        val saavnTab = actionButton("SAAVN", true) {}
+        val youtubeTab = actionButton("YOUTUBE", false) {}
+        fun selectMusicSource(source: String) {
+            musicSource = source
+            saavnTab.alpha = if (source == "saavn") 1f else 0.55f
+            youtubeTab.alpha = if (source == "youtube") 1f else 0.55f
+            tracks.clear(); adapterRefreshPlaceholder()
+            if (query.text.isNotBlank()) {
+                pendingMusicSearch?.let { musicSearchHandler.removeCallbacks(it) }
+                searchMusic(query.text.toString(), tracks, adapter, info, musicSource)
+            } else info.text = if (source == "youtube") "Search YouTube music through Piped" else "Search songs with JioSaavn"
+        }
+        filterRow.addView(saavnTab, LinearLayout.LayoutParams(dp(94), dp(36)).apply { rightMargin = dp(7) })
+        filterRow.addView(youtubeTab, LinearLayout.LayoutParams(dp(104), dp(36)))
         filterRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
-        filterRow.addView(actionButton("↻", false) { }, LinearLayout.LayoutParams(dp(42), dp(36)))
+        filterRow.addView(actionButton("↻", false) {
+            if (query.text.isNotBlank()) searchMusic(query.text.toString(), tracks, adapter, info, musicSource)
+        }, LinearLayout.LayoutParams(dp(42), dp(36)))
+        saavnTab.setOnClickListener { selectMusicSource("saavn") }
+        youtubeTab.setOnClickListener { selectMusicSource("youtube") }
         dialogRoot.addView(filterRow, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(10) })
 
         val info = text("Search JioSaavn for songs and artists", 11f, 0xFFB7B7B7.toInt()).apply {
             setPadding(dp(3), dp(6), dp(3), dp(5))
         }
         val infoRef = info
+        lateinit var adapter: BaseAdapter
         val list = ListView(this).apply {
             divider = android.graphics.drawable.ColorDrawable(0x35FFFFFF)
             dividerHeight = dp(1); cacheColorHint = Color.TRANSPARENT
             background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
             isVerticalScrollBarEnabled = true
         }
-        lateinit var adapter: BaseAdapter
         val adapterRef = object : BaseAdapter() {
             override fun getCount() = tracks.size
             override fun getItem(position: Int) = tracks[position]
@@ -589,6 +605,7 @@ class MainActivity : Activity() {
         }
         adapter = adapterRef
         list.adapter = adapter
+        fun adapterRefreshPlaceholder() { adapter.notifyDataSetChanged() }
         dialogRoot.addView(info)
         dialogRoot.addView(list, LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(8) })
 
@@ -635,7 +652,7 @@ class MainActivity : Activity() {
         query.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH || actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
                 pendingMusicSearch?.let { musicSearchHandler.removeCallbacks(it) }
-                searchJioSaavn(query.text.toString(), tracks, adapter, info)
+                searchMusic(query.text.toString(), tracks, adapter, info, musicSource)
                 query.clearFocus()
                 true
             } else false
@@ -654,7 +671,7 @@ class MainActivity : Activity() {
                     return
                 }
                 info.text = "Finding music for “${value.trim()}”…"
-                val task = Runnable { searchJioSaavn(value, tracks, adapter, info) }
+                val task = Runnable { searchMusic(value, tracks, adapter, info, musicSource) }
                 pendingMusicSearch = task
                 musicSearchHandler.postDelayed(task, 320L)
             }
@@ -682,6 +699,14 @@ class MainActivity : Activity() {
             }
         })
         updateMusicProgress()
+    }
+
+    private fun searchMusic(raw: String, tracks: MutableList<MusicTrack>, adapter: BaseAdapter, info: TextView, source: String) {
+        if (source == "youtube") {
+            searchPipedMusic(raw, tracks, adapter, info)
+            return
+        }
+        searchJioSaavn(raw, tracks, adapter, info)
     }
 
     private fun searchJioSaavn(raw: String, tracks: MutableList<MusicTrack>, adapter: BaseAdapter, info: TextView) {
@@ -762,7 +787,11 @@ class MainActivity : Activity() {
         }.start()
     }
 
-    private fun playJioSaavnTrack(track: MusicTrack) {
+${piped}    private fun playJioSaavnTrack(track: MusicTrack) {
+        if (track.id.startsWith("yt:")) {
+            playPipedMusicTrack(track)
+            return
+        }
         stopMusic(updateStatus = false)
         currentMusic = track
         musicStatus?.text = "Connecting · ${track.title}"
