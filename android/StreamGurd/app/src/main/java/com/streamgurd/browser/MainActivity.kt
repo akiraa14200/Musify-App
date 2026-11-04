@@ -33,6 +33,8 @@ class MainActivity : Activity() {
     private var musicResultsAdapter: BaseAdapter? = null
     private var musicSearchInFlight = false
     private var musicSearchRequest = 0
+    private val musicSearchHandler = Handler(Looper.getMainLooper())
+    private var pendingMusicSearch: Runnable? = null
     private var seekingMusic = false
     private val musicProgressHandler = Handler(Looper.getMainLooper())
     private val musicProgressRunnable = Runnable { updateMusicProgress() }
@@ -222,6 +224,7 @@ class MainActivity : Activity() {
             web.reload()
         }
         addFeature("◉  Hide Browser Controls", ::toggleBrowserChrome)
+        addFeature("⌂  App Home", ::showHome)
         val topActions = LinearLayout(this).apply {
             tag = "top-actions-panel"
             orientation = LinearLayout.VERTICAL
@@ -489,11 +492,12 @@ class MainActivity : Activity() {
         val tracks = mutableListOf<MusicTrack>()
         val dialogRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(12), dp(14), dp(10))
-            background = darkGlassShape(0xF00A0A0C.toInt(), 24)
+            setPadding(dp(16), dp(15), dp(16), dp(12))
+            background = darkGlassShape(0xF00B0E14.toInt(), 26)
         }
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        header.addView(text("♫  MUSIC PLAYER", 17f, Color.WHITE, true))
+        header.addView(text("♫  MUSIC", 18f, Color.WHITE, true))
+        header.addView(text("  •  JioSaavn", 10f, 0xFF9DAEC8.toInt()))
         header.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         val live = text("● READY", 10f, Color.rgb(170, 220, 210), true)
         header.addView(live)
@@ -505,15 +509,16 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), 0, dp(5), 0)
             background = GradientDrawable().apply {
-                setColor(0x302A2A2A); cornerRadius = dp(28).toFloat()
-                setStroke(dp(1), 0x88FFFFFF.toInt())
+                setColor(0xFF171D28.toInt()); cornerRadius = dp(18).toFloat()
+                setStroke(dp(1), 0x665F789D.toInt())
             }
         }
         searchRow.addView(text("⌕", 25f, Color.WHITE), LinearLayout.LayoutParams(dp(34), dp(48)))
         val query = EditText(this).apply {
             hint = "Search songs, artists, albums…"; setSingleLine(true)
             setTextColor(Color.WHITE); setHintTextColor(0xFFAAAAAA.toInt())
-            textSize = 15f; background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+            textSize = 14f; background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+            setPadding(dp(2), 0, dp(2), 0)
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
             inputType = android.text.InputType.TYPE_CLASS_TEXT
         }
@@ -591,9 +596,9 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(10), dp(9), dp(10), dp(9))
             background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                intArrayOf(0xDD55565A.toInt(), 0xEE161719.toInt(), 0xF008090A.toInt())).apply {
-                cornerRadius = dp(25).toFloat()
-                setStroke(dp(1), 0x99FFFFFF.toInt())
+                intArrayOf(0xFF29364B.toInt(), 0xFF171E2B.toInt(), 0xFF10141D.toInt())).apply {
+                cornerRadius = dp(22).toFloat()
+                setStroke(dp(1), 0x665F789D.toInt())
             }
         }
         val cover = ImageView(this).apply {
@@ -629,10 +634,39 @@ class MainActivity : Activity() {
         list.setOnItemClickListener { _, _, position, _ -> playJioSaavnTrack(tracks[position]) }
         query.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH || actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
-                searchJioSaavn(query.text.toString(), tracks, adapter, info); true
+                pendingMusicSearch?.let { musicSearchHandler.removeCallbacks(it) }
+                searchJioSaavn(query.text.toString(), tracks, adapter, info)
+                query.clearFocus()
+                true
             } else false
         }
-        dialog.setOnDismissListener { musicStatus = null; musicPlayButton = null; musicCoverView = null; musicSeekBar = null; musicElapsedView = null; musicDurationView = null }
+        query.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val value = s?.toString().orEmpty()
+                pendingMusicSearch?.let { musicSearchHandler.removeCallbacks(it) }
+                if (value.trim().isEmpty()) {
+                    ++musicSearchRequest
+                    musicSearchInFlight = false
+                    tracks.clear()
+                    adapter.notifyDataSetChanged()
+                    info.text = "Start typing to discover songs, artists and albums"
+                    return
+                }
+                info.text = "Finding music for “${value.trim()}”…"
+                val task = Runnable { searchJioSaavn(value, tracks, adapter, info) }
+                pendingMusicSearch = task
+                musicSearchHandler.postDelayed(task, 320L)
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+        dialog.setOnDismissListener {
+            pendingMusicSearch?.let { musicSearchHandler.removeCallbacks(it) }
+            ++musicSearchRequest
+            musicSearchInFlight = false
+            musicStatus = null; musicPlayButton = null; musicCoverView = null
+            musicSeekBar = null; musicElapsedView = null; musicDurationView = null
+        }
         dialog.show()
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
         dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.97f).toInt(), (resources.displayMetrics.heightPixels * 0.90f).toInt())
@@ -653,7 +687,6 @@ class MainActivity : Activity() {
     private fun searchJioSaavn(raw: String, tracks: MutableList<MusicTrack>, adapter: BaseAdapter, info: TextView) {
         val q = raw.trim()
         if (q.isEmpty()) { info.text = "Enter a song, artist or album"; return }
-        if (musicSearchInFlight) return
         musicSearchInFlight = true
         info.text = "Searching JioSaavn…"
         val requestId = ++musicSearchRequest
@@ -697,16 +730,33 @@ class MainActivity : Activity() {
                     if (!seen.add(key)) continue
                     found.add(MusicTrack(key, name, artists, album, duration, stream, image))
                 }
+                val normalizedQuery = q.lowercase(Locale.ROOT)
+                val ranked = found.sortedByDescending { track ->
+                    val title = track.title.lowercase(Locale.ROOT)
+                    val artist = track.artist.lowercase(Locale.ROOT)
+                    val album = track.album.lowercase(Locale.ROOT)
+                    when {
+                        title == normalizedQuery -> 100
+                        title.startsWith(normalizedQuery) -> 80
+                        artist.startsWith(normalizedQuery) -> 65
+                        album.startsWith(normalizedQuery) -> 55
+                        title.contains(normalizedQuery) -> 40
+                        artist.contains(normalizedQuery) -> 30
+                        album.contains(normalizedQuery) -> 20
+                        else -> 0
+                    }
+                }
                 runOnUiThread {
                     if (requestId != musicSearchRequest) return@runOnUiThread
-                    musicSearchInFlight = false; tracks.clear(); tracks.addAll(found); adapter.notifyDataSetChanged()
-                    info.text = if (found.isEmpty()) "No playable results. Try another spelling." else "${found.size} playable tracks · Tap a result"
+                    musicSearchInFlight = false
+                    tracks.clear(); tracks.addAll(ranked); adapter.notifyDataSetChanged()
+                    info.text = if (ranked.isEmpty()) "No matches yet. Try a song title or artist name." else "${ranked.size} suggestions · Best matches first"
                 }
             } catch (e: Exception) {
                 runOnUiThread {
                     if (requestId != musicSearchRequest) return@runOnUiThread
                     musicSearchInFlight = false
-                    info.text = "Search unavailable · ${e.message ?: "Please retry"}"
+                    info.text = "Couldn't load suggestions. Check connection and try again."
                 }
             } finally { connection?.disconnect() }
         }.start()
