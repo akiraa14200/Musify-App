@@ -72,8 +72,8 @@ class MainActivity : Activity() {
     }
 
     private fun applyBrowserSystemBars() {
-        window.statusBarColor = Color.rgb(8, 12, 23)
-        window.navigationBarColor = Color.rgb(8, 12, 23)
+        window.statusBarColor = Color.rgb(16, 18, 20)
+        window.navigationBarColor = Color.rgb(16, 18, 20)
         if (android.os.Build.VERSION.SDK_INT >= 30) {
             window.setDecorFitsSystemWindows(false)
         } else {
@@ -113,7 +113,7 @@ class MainActivity : Activity() {
             if (bold) typeface = Typeface.DEFAULT_BOLD
         }
     private fun buildUi() {
-        val bg = Color.rgb(8, 12, 23)
+        val bg = Color.rgb(16, 18, 20)
         val surface = Color.rgb(23, 33, 53)
         val muted = Color.rgb(178, 183, 190)
         val accent = Color.rgb(226, 229, 232)
@@ -130,7 +130,7 @@ class MainActivity : Activity() {
         val brandMark = TextView(this).apply {
             text = "☠"; textSize = 19f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
             setTextColor(Color.rgb(9, 15, 29))
-            background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(190, 211, 255), Color.rgb(115, 151, 220))).apply { cornerRadius = dp(11).toFloat() }
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(235, 237, 239), Color.rgb(150, 155, 160))).apply { cornerRadius = dp(11).toFloat() }
         }
         headerBar.addView(brandMark, LinearLayout.LayoutParams(dp(34), dp(34)))
         val brandText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(8), 0, 0, 0) }
@@ -224,9 +224,9 @@ class MainActivity : Activity() {
 
         homePanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(18), dp(18), dp(18), dp(18))
-            background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(24, 37, 61), Color.rgb(14, 21, 36))).apply { cornerRadius = dp(24).toFloat(); setStroke(dp(1), Color.rgb(42, 59, 88)) }
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(43, 46, 49), Color.rgb(25, 27, 29))).apply { cornerRadius = dp(24).toFloat(); setStroke(dp(1), Color.rgb(105, 109, 113)) }
         }
-        val heroIcon = TextView(this).apply { text = "🏴‍☠️"; textSize = 34f; gravity = Gravity.CENTER; setTextColor(accent); background = GradientDrawable().apply { setColor(Color.rgb(35, 53, 83)); cornerRadius = dp(20).toFloat() } }
+        val heroIcon = TextView(this).apply { text = "🏴‍☠️"; textSize = 34f; gravity = Gravity.CENTER; setTextColor(accent); background = GradientDrawable().apply { setColor(Color.rgb(58, 61, 64)); cornerRadius = dp(20).toFloat() } }
         homePanel.addView(heroIcon, LinearLayout.LayoutParams(dp(62), dp(62)).apply { gravity = Gravity.CENTER; bottomMargin = dp(14) })
         homePanel.addView(text("Set sail across the web.", 21f, Color.WHITE, true).apply { gravity = Gravity.CENTER })
         homePanel.addView(text("Your browser, your choice. Strawhat Pirate filters known ad and tracker domains and helps stop unwanted redirects.", 12f, Color.rgb(164, 180, 207)).apply { gravity = Gravity.CENTER; setLineSpacing(dp(3).toFloat(), 1f); setPadding(dp(4), dp(9), dp(4), dp(16)) })
@@ -369,7 +369,7 @@ class MainActivity : Activity() {
         tabs.addView(mangaTab, LinearLayout.LayoutParams(0, dp(38), 1f).apply { leftMargin = dp(4) })
         val search = EditText(this).apply {
             hint = "Search sites"; setSingleLine(true); setTextColor(Color.WHITE); setHintTextColor(Color.GRAY)
-            background = shape(Color.rgb(35,45,64),12); setPadding(dp(12),0,dp(12),0)
+            background = shape(Color.rgb(48, 51, 54),12); setPadding(dp(12),0,dp(12),0)
         }
         val info = text("",11f,Color.LTGRAY).apply { setPadding(dp(2),dp(8),dp(2),dp(8)) }
         val list = ListView(this)
@@ -387,10 +387,10 @@ class MainActivity : Activity() {
             val matches=entries.filter { it.name.contains(q,true)||it.url.contains(q,true) }
             filtered.clear(); filtered.addAll(matches)
             adapter.clear(); adapter.addAll(matches.map { it.name })
-            animeTab.background=shape(if(which=="Anime") Color.rgb(174,199,246) else Color.rgb(22,32,51),14)
-            mangaTab.background=shape(if(which=="Manga") Color.rgb(174,199,246) else Color.rgb(22,32,51),14)
-            animeTab.setTextColor(if(which=="Anime") Color.rgb(10,17,31) else Color.rgb(215,226,245))
-            mangaTab.setTextColor(if(which=="Manga") Color.rgb(10,17,31) else Color.rgb(215,226,245))
+            animeTab.background=shape(if(which=="Anime") Color.rgb(225, 228, 230) else Color.rgb(43, 46, 49),14)
+            mangaTab.background=shape(if(which=="Manga") Color.rgb(225, 228, 230) else Color.rgb(43, 46, 49),14)
+            animeTab.setTextColor(if(which=="Anime") Color.rgb(25, 27, 29) else Color.rgb(235, 237, 239))
+            mangaTab.setTextColor(if(which=="Manga") Color.rgb(25, 27, 29) else Color.rgb(235, 237, 239))
             info.text=if(entries.isEmpty()) "$which sheet is empty or unavailable" else "${matches.size} of ${entries.size} $which sites"
         }
         animeTab.setOnClickListener { render("Anime") }
@@ -411,7 +411,7 @@ class MainActivity : Activity() {
             }
         }
         dialog.show()
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Color.rgb(120,160,230))
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Color.rgb(205, 209, 212))
         dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(Color.LTGRAY)
         render("Anime")
         if(cachedCatalogue("Anime").isEmpty() || cachedCatalogue("Manga").isEmpty()) refreshCatalogue(false)
@@ -422,9 +422,9 @@ class MainActivity : Activity() {
         gravity = Gravity.CENTER
         textSize = 10f
         typeface = Typeface.DEFAULT_BOLD
-        setTextColor(Color.rgb(174, 194, 228))
+        setTextColor(Color.rgb(215, 218, 221))
         background = GradientDrawable().apply {
-            setColor(Color.rgb(27, 42, 66))
+            setColor(Color.rgb(48, 51, 54))
             cornerRadius = dp(18).toFloat()
         }
     }
