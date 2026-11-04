@@ -20,6 +20,7 @@ class MainActivity : Activity() {
     private lateinit var web: WebView
     private lateinit var url: EditText
     private lateinit var status: TextView
+    private lateinit var homePanel: LinearLayout
     private var blocking = true
     private var host = ""
     private var fullView: View? = null
@@ -91,6 +92,19 @@ class MainActivity : Activity() {
         root.addView(actions)
         status = text("READY · Aggressive protection enabled",11f,Color.rgb(143,160,190))
         root.addView(status)
+        homePanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(22),dp(24),dp(22),dp(24))
+            background = shape(Color.rgb(16,23,38),24)
+        }
+        homePanel.addView(text("Your quieter corner of the web",22f,Color.WHITE,true))
+        val intro = text("Add a website link to browse with aggressive protection against known ad and tracker domains.",14f,Color.rgb(157,173,201))
+        intro.gravity = Gravity.CENTER
+        intro.setPadding(0,dp(12),0,dp(20))
+        homePanel.addView(intro)
+        homePanel.addView(actionButton("+ ADD WEBSITE LINK") { addLink() },LinearLayout.LayoutParams(-1,dp(48)))
+        root.addView(homePanel,LinearLayout.LayoutParams(-1,0,1f))
         web = WebView(this)
         root.addView(web,LinearLayout.LayoutParams(-1,0,1f))
         setContentView(root)
@@ -160,11 +174,13 @@ class MainActivity : Activity() {
     private fun open(raw: String) {
         val value = normalized(raw)
         if(value == null) { toast("Enter a valid website URL"); return }
-        web.visibility = View.VISIBLE; findViewById<View>(android.R.id.content)
+        homePanel.visibility = View.GONE
+        web.visibility = View.VISIBLE
         status.text = "LOADING"; url.setText(value); web.loadUrl(value)
     }
     private fun showHome() {
         web.visibility = View.GONE
+        homePanel.visibility = View.VISIBLE
         status.text = "READY · Blocking known ad and tracker domains"
     }
     private fun addLink() {
