@@ -249,9 +249,8 @@ class MainActivity : Activity() {
                         val lp = view.layoutParams as FrameLayout.LayoutParams
                         prefs.edit().putInt("menu_x", lp.leftMargin).putInt("menu_y", lp.topMargin).apply()
                     } else {
-                        topActions.visibility = if (topActions.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                        view.performClick()
                     }
-                    view.performClick()
                     true
                 }
                 MotionEvent.ACTION_CANCEL -> true
