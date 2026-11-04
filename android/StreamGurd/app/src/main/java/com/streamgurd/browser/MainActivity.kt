@@ -34,6 +34,17 @@ class MainActivity : Activity() {
     private lateinit var url: EditText
     private lateinit var status: TextView
     private lateinit var homePanel: LinearLayout
+    private lateinit var headerBar: LinearLayout
+    private lateinit var addressBar: LinearLayout
+    private lateinit var actionRow: LinearLayout
+    private lateinit var statusRow: LinearLayout
+    private lateinit var browserBar: LinearLayout
+    private val hideChromeRunnable = Runnable {
+        if (web.visibility == View.VISIBLE) {
+            addressBar.visibility = View.GONE
+            browserBar.visibility = View.GONE
+        }
+    }
     private var blocking = true
     private var host = ""
     private var trustedHost = ""
@@ -83,7 +94,7 @@ class MainActivity : Activity() {
         }
 
         // Brand header and live protection indicator
-        val header = LinearLayout(this).apply {
+        headerBar = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(3), 0, dp(12))
         }
@@ -98,7 +109,7 @@ class MainActivity : Activity() {
                 cornerRadius = dp(15).toFloat()
             }
         }
-        header.addView(brandMark, LinearLayout.LayoutParams(dp(42), dp(42)))
+        headerBar.addView(brandMark, LinearLayout.LayoutParams(dp(42), dp(42)))
         val brandText = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(10), 0, 0, 0)
@@ -128,10 +139,10 @@ class MainActivity : Activity() {
             }
         }
         header.addView(shield)
-        root.addView(header, LinearLayout.LayoutParams(-1, dp(56)))
+        root.addView(headerBar, LinearLayout.LayoutParams(-1, dp(56)))
 
         // Rounded address field
-        val addressCard = LinearLayout(this).apply {
+        addressBar = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(13), dp(3), dp(5), dp(3))
             background = GradientDrawable().apply {
@@ -140,7 +151,7 @@ class MainActivity : Activity() {
                 setStroke(dp(1), Color.rgb(42, 56, 82))
             }
         }
-        addressCard.addView(text("⌕", 25f, accent, true).apply {
+        addressBar.addView(text("⌕", 25f, accent, true).apply {
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(dp(30), dp(46)))
         url = EditText(this).apply {
@@ -158,14 +169,14 @@ class MainActivity : Activity() {
         addressCard.addView(url, LinearLayout.LayoutParams(0, dp(48), 1f))
         addressCard.addView(actionButton("GO", true) { open(url.text.toString()) },
             LinearLayout.LayoutParams(dp(52), dp(40)))
-        root.addView(addressCard, LinearLayout.LayoutParams(-1, dp(56)))
+        root.addView(addressBar, LinearLayout.LayoutParams(-1, dp(56)))
 
         // Main shortcuts
-        val actions = LinearLayout(this).apply {
+        actionRow = LinearLayout(this).apply {
             gravity = Gravity.CENTER
             setPadding(0, dp(10), 0, dp(10))
         }
-        actions.addView(actionButton("＋  Add") { addLink() },
+        actionRow.addView(actionButton("＋  Add") { addLink() },
             LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(4) })
         actions.addView(actionButton("☆  Saved") { showSaved() },
             LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(4); rightMargin = dp(4) })
@@ -173,9 +184,9 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(5); rightMargin = dp(5) })
         actions.addView(actionButton("⋯  Menu") { menu() },
             LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(5) })
-        root.addView(actions)
+        root.addView(actionRow)
 
-        val statusRow = LinearLayout(this).apply {
+        statusRow = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(2), dp(2), dp(2), dp(9))
         }
@@ -237,7 +248,7 @@ class MainActivity : Activity() {
 
         web = WebView(this)
         root.addView(web, LinearLayout.LayoutParams(-1, 0, 1f))
-        val browserBar = LinearLayout(this).apply {
+        browserBar = LinearLayout(this).apply {
             gravity = Gravity.CENTER
             setPadding(0, dp(8), 0, 0)
         }
@@ -480,6 +491,32 @@ class MainActivity : Activity() {
                 return false
             }
         }
+        web.setOnTouchListener { _, event ->
+            if (event.action == android.view.MotionEvent.ACTION_DOWN &&
+                (addressBar.visibility != View.VISIBLE || browserBar.visibility != View.VISIBLE)) {
+                addressBar.visibility = View.VISIBLE
+                browserBar.visibility = View.VISIBLE
+                mainHandler.removeCallbacks(hideChromeRunnable)
+                mainHandler.postDelayed(hideChromeRunnable, 3500L)
+            } else if (event.action == android.view.MotionEvent.ACTION_UP &&
+                addressBar.visibility == View.VISIBLE) {
+                mainHandler.removeCallbacks(hideChromeRunnable)
+                mainHandler.postDelayed(hideChromeRunnable, 3500L)
+            }
+            false
+        }
+        web.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
+            if (scrollY > oldScrollY + dp(3)) {
+                mainHandler.removeCallbacks(hideChromeRunnable)
+                addressBar.visibility = View.GONE
+                browserBar.visibility = View.GONE
+            } else if (scrollY < oldScrollY - dp(3)) {
+                addressBar.visibility = View.VISIBLE
+                browserBar.visibility = View.VISIBLE
+                mainHandler.removeCallbacks(hideChromeRunnable)
+                mainHandler.postDelayed(hideChromeRunnable, 3500L)
+            }
+        }
         web.webChromeClient = object : WebChromeClient() {
             override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?) = false
             override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
@@ -514,16 +551,27 @@ class MainActivity : Activity() {
         if(value == null) { toast("Enter a valid website URL"); return }
         trustedHost = canonicalHost(hostOf(value))
         host = hostOf(value)
+        headerBar.visibility = View.GONE
+        actionRow.visibility = View.GONE
+        statusRow.visibility = View.GONE
         homePanel.visibility = View.GONE
+        addressBar.visibility = View.VISIBLE
         web.visibility = View.VISIBLE
-        (web.tag as? View)?.visibility = View.VISIBLE
-        status.text = "LOADING · $host"; url.setText(value); web.loadUrl(value)
+        browserBar.visibility = View.VISIBLE
+        url.setText(value)
+        web.loadUrl(value)
+        mainHandler.removeCallbacks(hideChromeRunnable)
+        mainHandler.postDelayed(hideChromeRunnable, 3500L)
     }
     private fun showHome() {
+        mainHandler.removeCallbacks(hideChromeRunnable)
         web.visibility = View.GONE
-        (web.tag as? View)?.visibility = View.GONE
+        browserBar.visibility = View.GONE
+        headerBar.visibility = View.VISIBLE
+        addressBar.visibility = View.VISIBLE
+        actionRow.visibility = View.VISIBLE
+        statusRow.visibility = View.VISIBLE
         homePanel.visibility = View.VISIBLE
-        status.text = "  READY  ·  Ad and tracker protection is on"
     }
     private fun addLink() {
         val field = EditText(this).apply { hint = "https://example.com"; setTextColor(Color.WHITE); setHintTextColor(Color.GRAY); setSingleLine(true) }
@@ -579,5 +627,10 @@ class MainActivity : Activity() {
         mainHandler.removeCallbacks(catalogueRefresh)
         mainHandler.postDelayed(catalogueRefresh, 15 * 60 * 1000L)
     }
-    override fun onDestroy() { mainHandler.removeCallbacks(catalogueRefresh); web.destroy(); super.onDestroy() }
+    override fun onDestroy() {
+        mainHandler.removeCallbacks(catalogueRefresh)
+        mainHandler.removeCallbacks(hideChromeRunnable)
+        web.destroy()
+        super.onDestroy()
+    }
 }
