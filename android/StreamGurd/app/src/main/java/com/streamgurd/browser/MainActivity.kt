@@ -881,15 +881,20 @@ class MainActivity : Activity() {
                 val automaticCrossSite = destination.isNotBlank() && !sameSite &&
                     (request.isRedirect || !request.hasGesture())
                 if (blocking && automaticCrossSite) {
+                    // Return to the exact document that initiated this redirect,
+                    // not the browser home page or an older previously visited URL.
+                    val sourcePage = view?.url.orEmpty().ifBlank { lastCommittedUrl }
                     view?.stopLoading()
-                    val safePage = lastCommittedUrl
-                    val currentHost = canonicalHost(hostOf(view?.url.orEmpty()))
-                    val safeHost = canonicalHost(hostOf(safePage))
-                    if (safePage.isNotBlank() && currentHost.isNotBlank() &&
-                        safeHost.isNotBlank() && currentHost != safeHost) {
+                    if (sourcePage.isNotBlank()) {
                         view?.post {
-                            if (canonicalHost(hostOf(view.url.orEmpty())) != safeHost) {
-                                view.loadUrl(safePage)
+                            val visibleUrl = view.url.orEmpty()
+                            val visibleHost = canonicalHost(hostOf(visibleUrl))
+                            val sourceHost = canonicalHost(hostOf(sourcePage))
+                            // Usually cancellation leaves the source document intact.
+                            // Reload it only if WebView has already switched away/blanked.
+                            if (visibleUrl.isBlank() || visibleHost.isBlank() ||
+                                (sourceHost.isNotBlank() && visibleHost != sourceHost)) {
+                                view.loadUrl(sourcePage)
                             }
                         }
                     }
