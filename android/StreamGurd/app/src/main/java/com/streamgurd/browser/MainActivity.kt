@@ -7,15 +7,28 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.*
 import android.widget.*
 import java.net.URI
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.Locale
 
 class MainActivity : Activity() {
+    private data class SiteEntry(val name: String, val url: String)
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val catalogueRefresh = object : Runnable {
+        override fun run() {
+            refreshCatalogue(false)
+            mainHandler.postDelayed(this, 15 * 60 * 1000L)
+        }
+    }
+    private val catalogueCsvUrl = "https://docs.google.com/spreadsheets/d/1VLCJE_YxSQlPbjQojaFTy1ZzrmpitetsAXDgTUpbHzs/export?format=csv&gid=0"
     private lateinit var root: LinearLayout
     private lateinit var web: WebView
     private lateinit var url: EditText
@@ -152,9 +165,11 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             setPadding(0, dp(10), 0, dp(10))
         }
-        actions.addView(actionButton("＋  Add link") { addLink() },
-            LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(5) })
+        actions.addView(actionButton("＋  Add") { addLink() },
+            LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(4) })
         actions.addView(actionButton("☆  Saved") { showSaved() },
+            LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(4); rightMargin = dp(4) })
+        actions.addView(actionButton("☷  Sites") { showCatalogue() },
             LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(5); rightMargin = dp(5) })
         actions.addView(actionButton("⋯  Menu") { menu() },
             LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(5) })
@@ -239,6 +254,144 @@ class MainActivity : Activity() {
         showHome()
         // Keep the compact browser controls attached to the root for visibility changes.
         web.tag = browserBar
+    }
+
+    private fun cachedCatalogue(): List<SiteEntry> {
+        val raw = prefs.getString("catalogue_csv", "").orEmpty()
+        return if (raw.isBlank()) emptyList() else parseCatalogue(raw)
+    }
+
+    private fun refreshCatalogue(showMessage: Boolean) {
+        Thread {
+            var connection: HttpURLConnection? = null
+            try {
+                connection = (URL(catalogueCsvUrl).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 12000
+                    readTimeout = 15000
+                    instanceFollowRedirects = true
+                    setRequestProperty("User-Agent", "StreamGurd Android")
+                    setRequestProperty("Accept", "text/csv,text/plain,*/*")
+                }
+                if (connection.responseCode !in 200..299) {
+                    throw IllegalStateException("HTTP ${connection.responseCode}")
+                }
+                val csv = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val entries = parseCatalogue(csv)
+                if (entries.isEmpty()) throw IllegalStateException("No valid Site Name / Site URL rows found")
+                prefs.edit().putString("catalogue_csv", csv)
+                    .putLong("catalogue_updated_at", System.currentTimeMillis()).apply()
+                runOnUiThread {
+                    if (showMessage) toast("Site catalogue updated · ${entries.size} sites")
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    if (showMessage) toast("Could not refresh catalogue. Showing saved sites.")
+                }
+            } finally {
+                connection?.disconnect()
+            }
+        }.start()
+    }
+
+    private fun parseCatalogue(csv: String): List<SiteEntry> {
+        val rows = mutableListOf<List<String>>()
+        val row = mutableListOf<String>()
+        val cell = StringBuilder()
+        var quoted = false
+        var i = 0
+        while (i < csv.length) {
+            val ch = csv[i]
+            when {
+                ch == '"' && quoted && i + 1 < csv.length && csv[i + 1] == '"' -> {
+                    cell.append('"'); i++
+                }
+                ch == '"' -> quoted = !quoted
+                ch == ',' && !quoted -> { row.add(cell.toString().trim()); cell.setLength(0) }
+                (ch == '\n' || ch == '\r') && !quoted -> {
+                    row.add(cell.toString().trim()); cell.setLength(0)
+                    if (row.any { it.isNotBlank() }) rows.add(row.toList())
+                    row.clear()
+                    if (ch == '\r' && i + 1 < csv.length && csv[i + 1] == '\n') i++
+                }
+                else -> cell.append(ch)
+            }
+            i++
+        }
+        row.add(cell.toString().trim())
+        if (row.any { it.isNotBlank() }) rows.add(row.toList())
+        if (rows.isEmpty()) return emptyList()
+        val header = rows.first().map { it.trim().lowercase(Locale.ROOT) }
+        val nameIndex = header.indexOfFirst { it == "site name" || it == "sitename" || it == "name" }
+        val urlIndex = header.indexOfFirst { it == "site url" || it == "siteurl" || it == "url" }
+        if (nameIndex < 0 || urlIndex < 0) return emptyList()
+        return rows.drop(1).mapNotNull { cells ->
+            val name = cells.getOrNull(nameIndex)?.trim().orEmpty()
+            val siteUrl = normalized(cells.getOrNull(urlIndex).orEmpty()) ?: return@mapNotNull null
+            if (name.isBlank()) null else SiteEntry(name, siteUrl)
+        }.distinctBy { it.url }
+    }
+
+    private fun showCatalogue() {
+        val entries = cachedCatalogue()
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(4))
+        }
+        val search = EditText(this).apply {
+            hint = "Search sites"
+            setSingleLine(true)
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.GRAY)
+            background = shape(Color.rgb(35, 45, 64), 12)
+            setPadding(dp(12), 0, dp(12), 0)
+        }
+        val info = text(
+            if (entries.isEmpty()) "No saved catalogue yet. Connect to the internet and refresh."
+            else "${entries.size} sites · Updates automatically while the app is open",
+            11f, Color.LTGRAY
+        )
+        info.setPadding(dp(2), dp(8), dp(2), dp(8))
+        val listView = ListView(this)
+        val filtered = entries.toMutableList()
+        val adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1,
+            filtered.map { it.name }.toMutableList())
+        listView.adapter = adapter
+        container.addView(search, LinearLayout.LayoutParams(-1, dp(48)))
+        container.addView(info)
+        container.addView(listView, LinearLayout.LayoutParams(-1, dp(360)))
+        val dialog = AlertDialog.Builder(this).setTitle("Site Catalogue")
+            .setView(container)
+            .setNegativeButton("Close", null)
+            .setPositiveButton("Refresh", null)
+            .create()
+        listView.setOnItemClickListener { _, _, position, _ ->
+            val selected = filtered.getOrNull(position) ?: return@setOnItemClickListener
+            dialog.dismiss()
+            open(selected.url)
+        }
+        search.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val query = s?.toString().orEmpty().trim()
+                val matches = entries.filter { it.name.contains(query, true) || it.url.contains(query, true) }
+                filtered.clear(); filtered.addAll(matches)
+                adapter.clear(); adapter.addAll(matches.map { it.name })
+                info.text = "${matches.size} of ${entries.size} sites"
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                refreshCatalogue(true)
+                toast("Refreshing site catalogue…")
+            }
+        }
+        dialog.show()
+        // Apply the button styling after show() creates the buttons.
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Color.rgb(120, 160, 230))
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(Color.LTGRAY)
+        if (entries.isEmpty()) refreshCatalogue(false)
     }
 
     private fun featureChip(label: String) = TextView(this).apply {
@@ -415,6 +568,16 @@ class MainActivity : Activity() {
         when { fullView != null -> exitFullscreen(); web.visibility == View.VISIBLE && web.canGoBack() -> web.goBack(); web.visibility == View.VISIBLE -> showHome(); else -> super.onBackPressed() }
     }
     override fun onPause() { super.onPause(); web.onPause() }
-    override fun onResume() { super.onResume(); web.onResume() }
-    override fun onDestroy() { web.destroy(); super.onDestroy() }
+    override fun onResume() {
+        super.onResume()
+        web.onResume()
+        refreshCatalogue(false)
+        mainHandler.removeCallbacks(catalogueRefresh)
+        mainHandler.postDelayed(catalogueRefresh, 15 * 60 * 1000L)
+    }
+    override fun onPause() {
+        mainHandler.removeCallbacks(catalogueRefresh)
+        super.onPause()
+    }
+    override fun onDestroy() { mainHandler.removeCallbacks(catalogueRefresh); web.destroy(); super.onDestroy() }
 }
