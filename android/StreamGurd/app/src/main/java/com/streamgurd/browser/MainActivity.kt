@@ -328,9 +328,18 @@ class MainActivity : Activity() {
             elevation = dp(20).toFloat()
             contentDescription = "Open floating music player"
         }
-        val musicFabParams = FrameLayout.LayoutParams(dp(54), dp(54), Gravity.BOTTOM or Gravity.END).apply {
-            rightMargin = dp(16)
-            bottomMargin = dp(86)
+        val savedMusicX = prefs.getInt("music_fab_x", -1)
+        val savedMusicY = prefs.getInt("music_fab_y", -1)
+        val musicFabParams = if (savedMusicX >= 0 && savedMusicY >= 0) {
+            FrameLayout.LayoutParams(dp(54), dp(54), Gravity.TOP or Gravity.START).apply {
+                leftMargin = savedMusicX.coerceAtMost((resources.displayMetrics.widthPixels - dp(54)).coerceAtLeast(0))
+                topMargin = savedMusicY.coerceAtMost((resources.displayMetrics.heightPixels - dp(54)).coerceAtLeast(0))
+            }
+        } else {
+            FrameLayout.LayoutParams(dp(54), dp(54), Gravity.BOTTOM or Gravity.END).apply {
+                rightMargin = dp(16)
+                bottomMargin = dp(86)
+            }
         }
         root.addView(musicFab, musicFabParams)
         var musicDownX = 0f
@@ -376,7 +385,8 @@ class MainActivity : Activity() {
             else {
                 val panel = musicPanel!!
                 panel.visibility = if (panel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-                musicFab?.text = if (panel.visibility == View.VISIBLE) "×" else "♫"
+                musicFab?.visibility = if (panel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                musicFab?.text = "♫"
             }
         }
         setContentView(root)
@@ -547,7 +557,7 @@ class MainActivity : Activity() {
     private fun showMusicPlayer() {
         musicPanel?.let { panel ->
             panel.visibility = View.VISIBLE
-            musicFab?.text = "×"
+            musicFab?.visibility = View.GONE
             return
         }
         val playerWeb = WebView(this).apply {
@@ -588,10 +598,11 @@ class MainActivity : Activity() {
             rightMargin = dp(12)
             bottomMargin = dp(76)
         })
-        musicFab?.text = "×"
+        musicFab?.visibility = View.GONE
 
         fun hidePlayer() {
             panel.visibility = View.GONE
+            musicFab?.visibility = View.VISIBLE
             musicFab?.text = "♫"
         }
         playerWeb.addJavascriptInterface(object {
