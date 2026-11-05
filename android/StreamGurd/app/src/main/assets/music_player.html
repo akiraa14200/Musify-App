@@ -149,7 +149,7 @@ async function searchComico(wt){
       const items = data.items || data.results || [];
       const mapped = items.slice(0, 15).map(item => {
         const raw = String(item.url || item.videoId || item.id || '');
-        const match = raw.match(/(?:v=|youtu\\.be\\/|^)([A-Za-z0-9_-]{11})(?:[&?/#]|$)/);
+        const match = raw.match(/[?&]v=([A-Za-z0-9_-]{11})/) || raw.match(/([A-Za-z0-9_-]{11})/);
         const videoId = match ? match[1] : (raw.length === 11 ? raw : '');
         if (!videoId) return null;
         return {
