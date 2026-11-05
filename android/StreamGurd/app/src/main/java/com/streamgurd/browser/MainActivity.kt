@@ -504,42 +504,61 @@ class MainActivity : Activity() {
         }
         musicEmbedView = playerWeb
         currentMusic = null
+        var dialog: AlertDialog? = null
+        var isMini = false
 
-        val dialog = AlertDialog.Builder(this).setView(playerWeb).create()
-        var minimized = false
-        fun resizePlayer(mini: Boolean) {
-            minimized = mini
-            val window = dialog.window ?: return
-            window.setBackgroundDrawableResource(android.R.color.transparent)
-            val width = if (mini) -1 else (resources.displayMetrics.widthPixels * 0.98f).toInt()
-            val height = if (mini) dp(90) else (resources.displayMetrics.heightPixels * 0.94f).toInt()
-            window.setLayout(width, height)
-            window.setGravity(if (mini) Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL else Gravity.CENTER)
-            val params = window.attributes
-            params.dimAmount = if (mini) 0f else 0.35f
-            window.attributes = params
+        fun showExpanded() {
+            (playerWeb.parent as? ViewGroup)?.removeView(playerWeb)
+            dialog = AlertDialog.Builder(this).setView(playerWeb).create().also { d ->
+                d.setOnDismissListener {
+                    if (!isMini) {
+                        playerWeb.stopLoading()
+                        playerWeb.loadUrl("about:blank")
+                        playerWeb.destroy()
+                        if (musicEmbedView === playerWeb) musicEmbedView = null
+                        currentMusic = null
+                    }
+                }
+                d.show()
+                d.window?.setBackgroundDrawableResource(android.R.color.transparent)
+                d.window?.setLayout(
+                    (resources.displayMetrics.widthPixels * 0.98f).toInt(),
+                    (resources.displayMetrics.heightPixels * 0.94f).toInt()
+                )
+            }
+            isMini = false
         }
+
+        fun minimizeToAppBar() {
+            val d = dialog
+            if (d?.isShowing == true) {
+                isMini = true
+                (playerWeb.parent as? ViewGroup)?.removeView(playerWeb)
+                d.dismiss()
+                root.addView(playerWeb, FrameLayout.LayoutParams(-1, dp(90), Gravity.BOTTOM))
+                playerWeb.evaluateJavascript("document.body.classList.add('mini');document.getElementById('minimize').style.display='none';document.getElementById('expand').style.display='inline-block';", null)
+            }
+        }
+
         playerWeb.addJavascriptInterface(object {
-            @JavascriptInterface fun minimizePlayer() { runOnUiThread { resizePlayer(true) } }
-            @JavascriptInterface fun expandPlayer() { runOnUiThread { resizePlayer(false) } }
+            @JavascriptInterface fun minimizePlayer() { runOnUiThread { minimizeToAppBar() } }
+            @JavascriptInterface fun expandPlayer() {
+                runOnUiThread {
+                    if (isMini) {
+                        (playerWeb.parent as? ViewGroup)?.removeView(playerWeb)
+                        showExpanded()
+                    }
+                }
+            }
         }, "StreamGurd")
 
-        dialog.setOnDismissListener {
-            playerWeb.stopLoading()
-            playerWeb.loadUrl("about:blank")
-            playerWeb.destroy()
-            if (musicEmbedView === playerWeb) musicEmbedView = null
-            currentMusic = null
-        }
-        dialog.show()
-        resizePlayer(false)
-
+        showExpanded()
         try {
             val html = assets.open("music_player.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
             playerWeb.loadDataWithBaseURL("https://appassets.androidplatform.net/", html, "text/html", "UTF-8", null)
         } catch (e: Exception) {
             toast("Music player could not be loaded: ${e.message ?: "asset missing"}")
-            dialog.dismiss()
+            dialog?.dismiss()
         }
     }
 
