@@ -115,7 +115,8 @@ function onYouTubeIframeAPIReady(){
 }
 window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
 
-function setMiniMode(on){ document.body.classList.toggle('mini',on); document.getElementById('minimize').style.display=on?'none':'inline-block'; document.getElementById('expand').style.display=on?'inline-block':'none'; if(window.StreamGurd){ if(on) StreamGurd.minimizePlayer(); else StreamGurd.expandPlayer(); } }\ndocument.getElementById('minimize').onclick=()=>setMiniMode(true);\ndocument.getElementById('expand').onclick=()=>setMiniMode(false);\nfunction esc(t){ const d=document.createElement('div'); d.textContent=t||''; return d.innerHTML; }
+function setMiniMode(on){ document.body.classList.toggle('mini',on); document.getElementById('minimize').style.display=on?'none':'inline-block'; document.getElementById('expand').style.display=on?'inline-block':'none'; if(window.StreamGurd){ if(on) StreamGurd.minimizePlayer(); else StreamGurd.expandPlayer(); } }\ndocument.getElementById('minimize').onclick=()=>setMiniMode(true);\ndocument.getElementById('expand').onclick=()=>setMiniMode(false);
+qEl.addEventListener('focus',()=>{ if(window.StreamGurd && StreamGurd.requestKeyboard) StreamGurd.requestKeyboard(); });\nfunction esc(t){ const d=document.createElement('div'); d.textContent=t||''; return d.innerHTML; }
 
 async function searchComico(wt){
   // EXACT code from Comico bundle:
