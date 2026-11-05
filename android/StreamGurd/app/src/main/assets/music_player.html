@@ -55,7 +55,7 @@ html,body{width:100%;height:100%;overflow:hidden}body{background:transparent;col
 .ctrl.prev,.ctrl.next{width:44px;background:rgba(255,255,255,0.1);color:#fff}
 .ctrl.play{flex:1;background:#fff;color:#000}
 .ctrl.stop{width:44px;background:rgba(255,255,255,0.1);color:#fff}
-#yt-player{position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none}
+#yt-stage{width:100%;height:200px;min-height:200px;background:#080808;display:flex;align-items:center;justify-content:center;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,.08)}#yt-player{width:100%;height:200px;min-width:200px;min-height:200px;display:block}#yt-player iframe{width:100%!important;height:200px!important;display:block!important;border:0}
 body.mini{padding:0;min-height:0;align-items:stretch;background:transparent}.mini .player{width:100%;max-width:none;height:82px;min-height:82px;border-radius:16px;border-bottom:0;display:flex}.mini .hdr{padding:8px 12px;border:0}.mini .hdr h2{font-size:13px}.mini .hdr h2 b{width:22px;height:22px}.mini #badge{display:none}.mini .search,.mini .list,.mini .overlay{display:none!important}.mini .np{display:block!important;padding:4px 10px;border:0;background:transparent}.mini .np-top{gap:8px}.mini .np-top img{width:34px;height:34px;border-radius:8px}.mini .np-tt{font-size:11px}.mini .np-ar{font-size:9px}.mini .ctrls{gap:5px;margin-top:-32px;justify-content:flex-end;position:relative;z-index:2}.mini .ctrl{height:30px;font-size:11px}.mini .ctrl.prev,.mini .ctrl.next,.mini .ctrl.stop{width:30px}.mini .ctrl.play{flex:0 0 54px}.mini #bars{display:none!important}
 </style>
 </head>
@@ -71,13 +71,13 @@ body.mini{padding:0;min-height:0;align-items:stretch;background:transparent}.min
     </div>
   </div>
   <div class="overlay" id="ov"><div class="s"></div><div style="margin-top:10px;font-size:13px;font-weight:600">Searching YouTube</div><div style="margin-top:4px;font-size:11px;color:rgba(255,255,255,0.4)">filter=music_songs • Piped API</div></div>
+  <div id="yt-stage" aria-label="YouTube music player"><div id="yt-player"></div></div>
   <div class="list" id="list"><div class="empty"><div class="ic">🎵</div><div>Search YouTube Music</div><div style="font-size:11px;margin-top:6px;color:rgba(255,255,255,0.25)">Real Comico search: /search?q=&filter=music_songs</div></div></div>
   <div class="np" id="np">
     <div class="np-top"><img id="npImg" src=""><div class="np-info"><div class="np-tt" id="npTt">-</div><div class="np-ar" id="npAr">-</div></div><div class="bars" id="bars" style="display:none"><span></span><span></span><span></span></div></div>
     <div class="ctrls"><button class="ctrl prev" id="prev">⏮</button><button class="ctrl play" id="play">Pause</button><button class="ctrl next" id="next">⏭</button><button class="ctrl stop" id="stop">✕</button></div>
   </div>
-  <!-- Hidden YouTube Player - EXACT like Comico uses He.current -->
-  <div id="yt-player"></div>
+
 </div>
 
 <script src="https://www.youtube.com/iframe_api"></script>
@@ -97,11 +97,12 @@ const badge = document.getElementById('badge');
 
 function onYouTubeIframeAPIReady(){
   ytPlayer = new YT.Player('yt-player', {
-    height: '1',
-    width: '1',
-    playerVars: { playsinline:1, controls:0, disablekb:1, fs:0 },
+    height: '200',
+    width: '100%',
+    playerVars: { playsinline:1, controls:1, disablekb:0, fs:0, origin: location.origin, rel:0 },
     events: {
-      onReady: ()=>{ console.log('YT Player ready - Comico style'); badge.textContent='YT Ready • Piped'; },
+      onReady: ()=>{ console.log('YT Player ready'); badge.textContent='YT Ready'; },
+      onError: (e)=>{ isPlaying=false; document.getElementById('play').textContent='Play'; document.getElementById('bars').style.display='none'; badge.textContent='Playback error • '+e.data; console.warn('YouTube player error',e.data); },
       onStateChange: (e)=>{
         if(e.data===YT.PlayerState.PLAYING){ isPlaying=true; document.getElementById('play').textContent='Pause'; document.getElementById('bars').style.display='flex'; badge.textContent='Playing'; }
         if(e.data===YT.PlayerState.PAUSED){ isPlaying=false; document.getElementById('play').textContent='Play'; document.getElementById('bars').style.display='none'; badge.textContent='Paused'; }
@@ -115,7 +116,7 @@ function onYouTubeIframeAPIReady(){
 }
 window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
 
-function setMiniMode(on){ document.body.classList.toggle('mini',on); document.getElementById('minimize').style.display=on?'none':'inline-block'; document.getElementById('expand').style.display=on?'inline-block':'none'; if(window.StreamGurd){ if(on) StreamGurd.minimizePlayer(); else StreamGurd.expandPlayer(); } }
+function setMiniMode(on){ if(on){ if(window.StreamGurd?.collapsePlayer) StreamGurd.collapsePlayer(); } else { document.body.classList.remove('mini'); document.getElementById('minimize').style.display='inline-block'; document.getElementById('expand').style.display='none'; } }
 document.getElementById('minimize').onclick=()=>setMiniMode(true);
 document.getElementById('expand').onclick=()=>setMiniMode(false);
 document.getElementById('closePlayer').onclick=()=>{if(window.StreamGurd&&StreamGurd.closePlayer)StreamGurd.closePlayer();};
@@ -255,7 +256,7 @@ qEl.addEventListener('input', e=>{
 });
 
 // controls - same as Comico ml()
-document.getElementById('collapse').onclick = ()=>{ if(window.StreamGurd?.collapsePlayer) StreamGurd.collapsePlayer(); };
+// The native floating-panel collapse is handled by the header minimise button.
 document.getElementById('play').onclick = ()=>{
   if(!ytPlayer) return;
   if(isPlaying){
