@@ -24,23 +24,12 @@ import android.os.SystemClock
 
 class MainActivity : Activity() {
     private data class SiteEntry(val name: String, val url: String, val category: String)
-    private data class MusicTrack(val id: String, val title: String, val artist: String, val album: String, val duration: Int, val stream: String, val image: String)
-    private var musicPlayer: androidx.media3.exoplayer.ExoPlayer? = null
-    private var musicCoverView: ImageView? = null
-    private var musicSeekBar: SeekBar? = null
-    private var musicElapsedView: TextView? = null
-    private var musicDurationView: TextView? = null
-    private var musicResultsAdapter: BaseAdapter? = null
-    private var musicSearchInFlight = false
+    private data class MusicTrack(val id: String, val title: String, val artist: String, val album: String, val duration: Int, val image: String)
     private var musicSearchRequest = 0
     private val musicSearchHandler = Handler(Looper.getMainLooper())
     private var pendingMusicSearch: Runnable? = null
-    private var seekingMusic = false
-    private val musicProgressHandler = Handler(Looper.getMainLooper())
-    private val musicProgressRunnable = Runnable { updateMusicProgress() }
-    private var musicStatus: TextView? = null
-    private var musicPlayButton: TextView? = null
     private var currentMusic: MusicTrack? = null
+    private var musicEmbedView: WebView? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val catalogueRefresh = object : Runnable {
         override fun run() {
@@ -490,356 +479,134 @@ class MainActivity : Activity() {
 
     private fun showMusicPlayer() {
         val tracks = mutableListOf<MusicTrack>()
-        val dialogRoot = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(15), dp(16), dp(12))
-            background = darkGlassShape(0xF00B0E14.toInt(), 26)
-        }
+        val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16),dp(15),dp(16),dp(12)); background = darkGlassShape(0xF00B0E14.toInt(),26) }
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        header.addView(text("♫  MUSIC", 18f, Color.WHITE, true))
-        header.addView(text("  •  yt-dlp", 10f, 0xFF9DAEC8.toInt()))
-        header.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
-        val live = text("● READY", 10f, Color.rgb(170, 220, 210), true)
-        header.addView(live)
-        val close = actionButton("✕") { }
-        header.addView(close, LinearLayout.LayoutParams(dp(42), dp(38)).apply { leftMargin = dp(8) })
-        dialogRoot.addView(header)
-
-        val searchRow = LinearLayout(this).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), 0, dp(5), 0)
-            background = GradientDrawable().apply {
-                setColor(0xFF171D28.toInt()); cornerRadius = dp(18).toFloat()
-                setStroke(dp(1), 0x665F789D.toInt())
-            }
+        header.addView(text("♫  YOUTUBE MUSIC",17f,Color.WHITE,true))
+        header.addView(View(this),LinearLayout.LayoutParams(0,1,1f))
+        val info = text("Add a YouTube Data API key to search.",11f,0xFFB7B7B7.toInt())
+        header.addView(actionButton("API KEY") { configureYouTubeApiKey(info) },LinearLayout.LayoutParams(dp(76),dp(36)))
+        val close = actionButton("✕") {}
+        header.addView(close,LinearLayout.LayoutParams(dp(42),dp(36)).apply { leftMargin=dp(7) })
+        panel.addView(header)
+        val searchRow = LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL; setPadding(dp(12),0,dp(5),0); background=GradientDrawable().apply { setColor(0xFF171D28.toInt()); cornerRadius=dp(18).toFloat(); setStroke(dp(1),0x665F789D.toInt()) } }
+        searchRow.addView(text("⌕",25f,Color.WHITE),LinearLayout.LayoutParams(dp(34),dp(48)))
+        val query = EditText(this).apply { hint="Search songs, artists, albums…"; setSingleLine(true); setTextColor(Color.WHITE); setHintTextColor(0xFFAAAAAA.toInt()); textSize=14f; background=android.graphics.drawable.ColorDrawable(Color.TRANSPARENT); setPadding(dp(2),0,dp(2),0); imeOptions=android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH; inputType=android.text.InputType.TYPE_CLASS_TEXT }
+        searchRow.addView(query,LinearLayout.LayoutParams(0,dp(50),1f))
+        searchRow.addView(actionButton("×") { query.text.clear() },LinearLayout.LayoutParams(dp(38),dp(38)))
+        panel.addView(searchRow,LinearLayout.LayoutParams(-1,dp(54)).apply { topMargin=dp(12) })
+        panel.addView(info,LinearLayout.LayoutParams(-1,dp(30)))
+        val playing = text("NOW PLAYING · Select a result",10f,0xFFD0D0D0.toInt(),true)
+        panel.addView(playing)
+        val playerWeb = WebView(this).apply {
+            setBackgroundColor(Color.BLACK)
+            settings.javaScriptEnabled=true; settings.domStorageEnabled=true; settings.mediaPlaybackRequiresUserGesture=true
+            settings.javaScriptCanOpenWindowsAutomatically=false; settings.setSupportMultipleWindows(false)
+            settings.mixedContentMode=WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            settings.userAgentString=settings.userAgentString.replace("; wv","")
+            CookieManager.getInstance().setAcceptCookie(true); CookieManager.getInstance().setAcceptThirdPartyCookies(this,true)
+            webChromeClient=WebChromeClient(); webViewClient=WebViewClient()
         }
-        searchRow.addView(text("⌕", 25f, Color.WHITE), LinearLayout.LayoutParams(dp(34), dp(48)))
-        val query = EditText(this).apply {
-            hint = "Search songs, artists, albums…"; setSingleLine(true)
-            setTextColor(Color.WHITE); setHintTextColor(0xFFAAAAAA.toInt())
-            textSize = 14f; background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
-            setPadding(dp(2), 0, dp(2), 0)
-            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
-            inputType = android.text.InputType.TYPE_CLASS_TEXT
-        }
-        searchRow.addView(query, LinearLayout.LayoutParams(0, dp(50), 1f))
-        val clear = actionButton("×") { query.text.clear() }
-        searchRow.addView(clear, LinearLayout.LayoutParams(dp(38), dp(38)))
-        dialogRoot.addView(searchRow, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(12) })
-
-        val filterRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        var musicSource = "youtube"
-        val saavnTab = actionButton("YOUTUBE MUSIC", true) {}
-        val youtubeTab = actionButton("API", false) {}
-        val refreshMusic = actionButton("↻", false) {}
-        filterRow.addView(saavnTab, LinearLayout.LayoutParams(dp(145), dp(36)).apply { rightMargin = dp(7) })
-        filterRow.addView(youtubeTab, LinearLayout.LayoutParams(dp(104), dp(36)))
-        filterRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
-        filterRow.addView(refreshMusic, LinearLayout.LayoutParams(dp(42), dp(36)))
-        dialogRoot.addView(filterRow, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(10) })
-
-        val info = text("Search YouTube songs and artists · yt-dlp", 11f, 0xFFB7B7B7.toInt()).apply {
-            setPadding(dp(3), dp(6), dp(3), dp(5))
-        }
-        val infoRef = info
-        lateinit var adapter: BaseAdapter
-        val list = ListView(this).apply {
-            divider = android.graphics.drawable.ColorDrawable(0x35FFFFFF)
-            dividerHeight = dp(1); cacheColorHint = Color.TRANSPARENT
-            background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
-            isVerticalScrollBarEnabled = true
-        }
-        val adapterRef = object : BaseAdapter() {
-            override fun getCount() = tracks.size
-            override fun getItem(position: Int) = tracks[position]
-            override fun getItemId(position: Int) = tracks[position].id.hashCode().toLong()
-            override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
-                val track = tracks[position]
-                val row = LinearLayout(this@MainActivity).apply {
-                    gravity = Gravity.CENTER_VERTICAL
-                    setPadding(dp(4), dp(7), dp(5), dp(7))
-                    background = if (currentMusic?.id == track.id) shape(0x553F3F3F.toInt(), 13) else android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
-                }
-                val art = ImageView(this@MainActivity).apply {
-                    layoutParams = LinearLayout.LayoutParams(dp(62), dp(62))
-                    scaleType = ImageView.ScaleType.CENTER_CROP
-                    background = shape(0xFF303034.toInt(), 12)
-                    setImageResource(android.R.drawable.ic_media_play)
-                    tag = track.image
-                }
-                if (track.image.isNotBlank()) Thread {
-                    try {
-                        val c = URL(track.image).openConnection() as HttpURLConnection
-                        c.connectTimeout = 6000; c.readTimeout = 8000
-                        val bitmap = try { c.inputStream.use { android.graphics.BitmapFactory.decodeStream(it) } } finally { c.disconnect() }
-                        if (bitmap != null) runOnUiThread { if (art.tag == track.image) art.setImageBitmap(bitmap) }
-                    } catch (_: Exception) { }
-                }.start()
+        musicEmbedView=playerWeb
+        panel.addView(playerWeb,LinearLayout.LayoutParams(-1,dp(218)).apply { bottomMargin=dp(8) })
+        val list=ListView(this).apply { divider=android.graphics.drawable.ColorDrawable(0x35FFFFFF); dividerHeight=dp(1); cacheColorHint=Color.TRANSPARENT; background=android.graphics.drawable.ColorDrawable(Color.TRANSPARENT) }
+        val adapter=object: BaseAdapter() {
+            override fun getCount()=tracks.size
+            override fun getItem(position:Int)=tracks[position]
+            override fun getItemId(position:Int)=tracks[position].id.hashCode().toLong()
+            override fun getView(position:Int,convertView:View?,parent:ViewGroup?):View {
+                val track=tracks[position]
+                val row=LinearLayout(this@MainActivity).apply { gravity=Gravity.CENTER_VERTICAL; setPadding(dp(4),dp(7),dp(5),dp(7)); background=if(currentMusic?.id==track.id) shape(0x553F3F3F.toInt(),13) else android.graphics.drawable.ColorDrawable(Color.TRANSPARENT) }
+                val art=ImageView(this@MainActivity).apply { layoutParams=LinearLayout.LayoutParams(dp(58),dp(58)); scaleType=ImageView.ScaleType.CENTER_CROP; background=shape(0xFF303034.toInt(),12); setImageResource(android.R.drawable.ic_media_play); tag=track.image }
+                if(track.image.isNotBlank()) Thread { try { val c=URL(track.image).openConnection() as HttpURLConnection; c.connectTimeout=6000; c.readTimeout=8000; val bmp=try { c.inputStream.use { android.graphics.BitmapFactory.decodeStream(it) } } finally { c.disconnect() }; if(bmp!=null) runOnUiThread { if(art.tag==track.image) art.setImageBitmap(bmp) } } catch(_:Exception){} }.start()
                 row.addView(art)
-                val details = LinearLayout(this@MainActivity).apply {
-                    orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, dp(5), 0)
-                }
-                details.addView(text(track.title, 14f, Color.WHITE, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
-                details.addView(text(track.artist.ifBlank { "Unknown artist" }, 11f, 0xFFB8B8B8.toInt()).apply { maxLines = 1 })
-                details.addView(text(track.album, 10f, 0xFF888888.toInt()).apply { maxLines = 1 })
-                row.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
-                row.addView(text(if (track.duration > 0) formatMusicTime(track.duration * 1000L) else "♫", 11f, 0xFFCCCCCC.toInt()))
-                row.addView(actionButton(if (currentMusic?.id == track.id && musicPlayer?.isPlaying == true) "Ⅱ" else "▶") {
-                    playYtDlpTrack(track)
-                }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { leftMargin = dp(7) })
+                val details=LinearLayout(this@MainActivity).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(10),0,dp(5),0) }
+                details.addView(text(track.title,13f,Color.WHITE,true).apply { maxLines=2; ellipsize=android.text.TextUtils.TruncateAt.END })
+                details.addView(text(track.artist,10f,0xFFB8B8B8.toInt()).apply { maxLines=1 })
+                row.addView(details,LinearLayout.LayoutParams(0,-2,1f))
+                row.addView(text("▶",17f,Color.WHITE,true).apply { setPadding(dp(8),dp(4),dp(8),dp(4)) })
                 return row
             }
         }
-        adapter = adapterRef
-        list.adapter = adapter
-        fun adapterRefreshPlaceholder() { adapter.notifyDataSetChanged() }
-        saavnTab.setOnClickListener { }
-        youtubeTab.setOnClickListener { configureMusicBackend(info) }
-        refreshMusic.setOnClickListener {
-            if (query.text.isNotBlank()) searchMusic(query.text.toString(), tracks, adapter, info, "youtube")
-        }
-        dialogRoot.addView(info)
-        dialogRoot.addView(list, LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(8) })
-
-        val mini = LinearLayout(this).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(9), dp(10), dp(9))
-            background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                intArrayOf(0xFF29364B.toInt(), 0xFF171E2B.toInt(), 0xFF10141D.toInt())).apply {
-                cornerRadius = dp(22).toFloat()
-                setStroke(dp(1), 0x665F789D.toInt())
-            }
-        }
-        val cover = ImageView(this).apply {
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            background = shape(0xFF343438.toInt(), 15)
-            setImageResource(android.R.drawable.ic_media_play)
-        }
-        mini.addView(cover, LinearLayout.LayoutParams(dp(76), dp(76)))
-        val nowText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, dp(6), 0) }
-        nowText.addView(text("NOW PLAYING", 9f, 0xFFD0D0D0.toInt(), true))
-        val statusText = text(currentMusic?.title ?: "Choose a song", 13f, Color.WHITE, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
-        musicStatus = statusText
-        nowText.addView(statusText)
-        val artistText = text(currentMusic?.artist ?: "YouTube Music", 10f, 0xFFBBBBBB.toInt()).apply { maxLines = 1 }
-        nowText.addView(artistText)
-        mini.addView(nowText, LinearLayout.LayoutParams(0, -2, 1f))
-        val play = actionButton(if (musicPlayer?.isPlaying == true) "Ⅱ" else "▶") { toggleMusicPlayback() }
-        musicPlayButton = play
-        mini.addView(play, LinearLayout.LayoutParams(dp(48), dp(48)))
-        mini.addView(actionButton("■") { stopMusic() }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { leftMargin = dp(5) })
-        dialogRoot.addView(mini, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
-
-        val seek = SeekBar(this).apply { max = 1000; progress = 0 }
-        dialogRoot.addView(seek, LinearLayout.LayoutParams(-1, dp(22)))
-        val timeRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        val elapsed = text("0:00", 9f, Color.LTGRAY)
-        val total = text("0:00", 9f, Color.LTGRAY)
-        timeRow.addView(elapsed); timeRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f)); timeRow.addView(total)
-        dialogRoot.addView(timeRow)
-
-        val dialog = AlertDialog.Builder(this).setView(dialogRoot).create()
+        list.adapter=adapter
+        panel.addView(list,LinearLayout.LayoutParams(-1,0,1f))
+        val dialog=AlertDialog.Builder(this).setView(panel).create()
         close.setOnClickListener { dialog.dismiss() }
-        list.setOnItemClickListener { _, _, position, _ -> playYtDlpTrack(tracks[position]) }
-        query.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH || actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
-                pendingMusicSearch?.let { musicSearchHandler.removeCallbacks(it) }
-                searchMusic(query.text.toString(), tracks, adapter, info, musicSource)
-                query.clearFocus()
-                true
-            } else false
+        list.setOnItemClickListener { _,_,position,_ ->
+            val track=tracks.getOrNull(position) ?: return@setOnItemClickListener
+            currentMusic=track; playing.text="NOW PLAYING · ${track.title}"
+            val html="<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'></head><body style='margin:0;background:#000'><iframe width='100%' height='218' src='https://www.youtube.com/embed/${track.id}?playsinline=1&rel=0' title='YouTube video player' frameborder='0' allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share' referrerpolicy='strict-origin-when-cross-origin' allowfullscreen></iframe></body></html>"
+            playerWeb.loadDataWithBaseURL("https://www.youtube.com/",html,"text/html","UTF-8",null)
+            adapter.notifyDataSetChanged()
         }
-        query.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                val value = s?.toString().orEmpty()
-                pendingMusicSearch?.let { musicSearchHandler.removeCallbacks(it) }
-                if (value.trim().isEmpty()) {
-                    ++musicSearchRequest
-                    musicSearchInFlight = false
-                    tracks.clear()
-                    adapter.notifyDataSetChanged()
-                    info.text = "Start typing to discover songs, artists and albums"
-                    return
-                }
-                info.text = "Finding music for “${value.trim()}”…"
-                val task = Runnable { searchMusic(value, tracks, adapter, info, musicSource) }
-                pendingMusicSearch = task
-                musicSearchHandler.postDelayed(task, 320L)
+        query.setOnEditorActionListener { _,id,_ -> if(id==android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH || id==android.view.inputmethod.EditorInfo.IME_ACTION_DONE) { pendingMusicSearch?.let { musicSearchHandler.removeCallbacks(it) }; searchYouTubeMusic(query.text.toString(),tracks,adapter,info); query.clearFocus(); true } else false }
+        query.addTextChangedListener(object:android.text.TextWatcher {
+            override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}
+            override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int) {
+                val value=s?.toString().orEmpty(); pendingMusicSearch?.let { musicSearchHandler.removeCallbacks(it) }
+                if(value.trim().isEmpty()) { ++musicSearchRequest; tracks.clear(); adapter.notifyDataSetChanged(); info.text="Search YouTube songs, artists and albums"; return }
+                info.text="Searching YouTube…"
+                val task=Runnable { searchYouTubeMusic(value,tracks,adapter,info) }; pendingMusicSearch=task; musicSearchHandler.postDelayed(task,450L)
             }
-            override fun afterTextChanged(s: android.text.Editable?) {}
+            override fun afterTextChanged(s:android.text.Editable?){}
         })
-        dialog.setOnDismissListener {
-            pendingMusicSearch?.let { musicSearchHandler.removeCallbacks(it) }
-            ++musicSearchRequest
-            musicSearchInFlight = false
-            musicStatus = null; musicPlayButton = null; musicCoverView = null
-            musicSeekBar = null; musicElapsedView = null; musicDurationView = null
-        }
-        dialog.show()
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.97f).toInt(), (resources.displayMetrics.heightPixels * 0.90f).toInt())
-        musicCoverView = cover; musicSeekBar = seek
-        musicElapsedView = elapsed; musicDurationView = total
-        musicResultsAdapter = adapter
-        seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {}
-            override fun onStartTrackingTouch(bar: SeekBar?) { seekingMusic = true }
-            override fun onStopTrackingTouch(bar: SeekBar?) {
-                seekingMusic = false
-                musicPlayer?.let { if (it.duration > 0) it.seekTo((it.duration * (bar?.progress ?: 0) / 1000f).toLong()) }
-            }
-        })
-        updateMusicProgress()
+        dialog.setOnDismissListener { pendingMusicSearch?.let { musicSearchHandler.removeCallbacks(it) }; ++musicSearchRequest; playerWeb.stopLoading(); playerWeb.loadUrl("about:blank"); playerWeb.destroy(); musicEmbedView=null; currentMusic=null }
+        dialog.show(); dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.window?.setLayout((resources.displayMetrics.widthPixels*0.97f).toInt(),(resources.displayMetrics.heightPixels*0.92f).toInt())
+        if(youtubeApiKey().isBlank()) info.text="Tap API KEY and add your own YouTube Data API key."
     }
 
-    private fun searchMusic(raw: String, tracks: MutableList<MusicTrack>, adapter: BaseAdapter, info: TextView, source: String) {
-        searchYtDlpMusic(raw, tracks, adapter, info)
-    }
+    private fun youtubeApiKey(): String = prefs.getString("youtube_data_api_key","").orEmpty().trim()
 
-    private fun musicBackendUrl(): String = prefs.getString("music_backend_url", "").orEmpty().trim().trimEnd('/')
-
-    private fun configureMusicBackend(info: TextView) {
-        val field = EditText(this).apply { hint = "https://your-service.onrender.com"; setText(musicBackendUrl()); setTextColor(Color.WHITE); setHintTextColor(Color.GRAY); setSingleLine(true) }
-        AlertDialog.Builder(this).setTitle("YouTube Music backend").setMessage("Paste the HTTPS URL of the hosted yt-dlp backend.")
-            .setView(field).setNegativeButton("Cancel", null).setPositiveButton("Save") { _, _ ->
-                val value = field.text.toString().trim().trimEnd('/')
-                if (value.startsWith("https://")) { prefs.edit().putString("music_backend_url", value).apply(); checkMusicBackend(info) }
-                else toast("Enter a valid HTTPS backend URL")
+    private fun configureYouTubeApiKey(info: TextView) {
+        val field=EditText(this).apply { hint="Paste YouTube Data API v3 key"; setText(youtubeApiKey()); setTextColor(Color.WHITE); setHintTextColor(Color.GRAY); setSingleLine(true); inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD }
+        AlertDialog.Builder(this).setTitle("YouTube Data API key")
+            .setMessage("Search uses Google's official YouTube Data API. Enable YouTube Data API v3 in your Google Cloud project. Your key is stored only on this device; restrict it to this app where possible.")
+            .setView(field).setNegativeButton("Cancel",null).setPositiveButton("Save") { _,_ ->
+                val key=field.text.toString().trim()
+                if(key.isBlank()) { prefs.edit().remove("youtube_data_api_key").apply(); info.text="API key cleared" }
+                else { prefs.edit().putString("youtube_data_api_key",key).apply(); info.text="API key saved · Search YouTube" }
             }.show()
     }
 
-    private fun checkMusicBackend(info: TextView) {
-        Thread { try {
-            val c = (URL(musicBackendUrl() + "/health").openConnection() as HttpURLConnection).apply { connectTimeout = 5000; readTimeout = 7000 }
-            val code = try { c.responseCode } finally { c.disconnect() }
-            runOnUiThread { info.text = if (code in 200..299) "Backend connected · ready to search" else "Backend returned HTTP $code" }
-        } catch (_: Exception) { runOnUiThread { info.text = "Backend unavailable · deploy it and set its URL using API" } } }.start()
-    }
-
-    private fun searchYtDlpMusic(raw: String, tracks: MutableList<MusicTrack>, adapter: BaseAdapter, info: TextView) {
-        val base = musicBackendUrl(); val query = raw.trim()
-        if (base.isBlank()) { info.text = "Set hosted yt-dlp backend URL using API"; return }
-        if (query.isEmpty()) return
-        val requestId = ++musicSearchRequest; musicSearchInFlight = true; info.text = "Searching YouTube…"
-        Thread { var connection: HttpURLConnection? = null; try {
-            connection = (URL(base + "/api/search?q=" + java.net.URLEncoder.encode(query, "UTF-8")).openConnection() as HttpURLConnection).apply { connectTimeout = 8000; readTimeout = 30000; setRequestProperty("Accept", "application/json") }
-            val code = connection.responseCode
-            val body = (if (code in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) throw IllegalStateException(try { org.json.JSONObject(body).optString("error").ifBlank { "HTTP $code" } } catch (_: Exception) { "HTTP $code" })
-            val parsed = org.json.JSONTokener(body).nextValue()
-            val items = when (parsed) { is org.json.JSONArray -> parsed; is org.json.JSONObject -> parsed.optJSONArray("results") ?: org.json.JSONArray(); else -> org.json.JSONArray() }
-            val found = mutableListOf<MusicTrack>(); val seen = HashSet<String>()
-            for (i in 0 until minOf(items.length(), 30)) {
-                val item = items.optJSONObject(i) ?: continue; val id = item.optString("id").trim(); val title = item.optString("title").trim()
-                if (id.isBlank() || title.isBlank() || !seen.add(id)) continue
-                val stream = base + "/api/stream?id=" + java.net.URLEncoder.encode(id, "UTF-8")
-                found.add(MusicTrack(id, title, item.optString("artist").ifBlank { "YouTube" }, "YouTube", item.optInt("duration", 0), stream, item.optString("thumbnail")))
-            }
-            runOnUiThread { if (requestId != musicSearchRequest) return@runOnUiThread; musicSearchInFlight = false; tracks.clear(); tracks.addAll(found); adapter.notifyDataSetChanged(); info.text = if (found.isEmpty()) "No results. Try another song or artist." else "${found.size} YouTube results" }
-        } catch (e: Exception) { runOnUiThread { if (requestId != musicSearchRequest) return@runOnUiThread; musicSearchInFlight = false; info.text = "Search failed · ${e.message ?: "Backend unavailable"}" } }
-        finally { connection?.disconnect() } }.start()
-    }
-
-    private fun playYtDlpTrack(track: MusicTrack) {
-        if (track.stream.isBlank()) { musicStatus?.text = "Missing stream URL"; return }
-        playResolvedMusicTrack(track)
-    }
-
-    private fun playResolvedMusicTrack(track: MusicTrack) {
-        stopMusic(updateStatus = false)
-        currentMusic = track
-        musicStatus?.text = "Connecting · ${track.title}"
-        musicPlayButton?.text = "LOADING…"
-        musicResultsAdapter?.notifyDataSetChanged()
-        if (track.image.isNotBlank()) loadMusicArtwork(track.image)
-        try {
-            val player = androidx.media3.exoplayer.ExoPlayer.Builder(this)
-                .setLoadControl(androidx.media3.exoplayer.DefaultLoadControl.Builder()
-                    .setBufferDurationsMs(15000, 50000, 1500, 4000).build())
-                .build()
-            musicPlayer = player
-            player.addListener(object : androidx.media3.common.Player.Listener {
-                override fun onPlaybackStateChanged(state: Int) {
-                    when (state) {
-                        androidx.media3.common.Player.STATE_BUFFERING -> {
-                            musicStatus?.text = "Buffering · ${track.title}"; musicPlayButton?.text = "BUFFERING…"
-                        }
-                        androidx.media3.common.Player.STATE_READY -> {
-                            musicStatus?.text = track.title + " · " + track.artist
-                            musicPlayButton?.text = if (player.playWhenReady) "Ⅱ  PAUSE" else "▶  PLAY"
-                            musicDurationView?.text = formatMusicTime(player.duration)
-                        }
-                        androidx.media3.common.Player.STATE_ENDED -> {
-                            musicStatus?.text = "Finished · ${track.title}"; musicPlayButton?.text = "▶  REPLAY"
-                        }
-                    }
-                }
-                override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    musicPlayButton?.text = if (isPlaying) "Ⅱ  PAUSE" else "▶  PLAY"
-                }
-                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    musicStatus?.text = "Stream failed · Try another result"; musicPlayButton?.text = "▶  RETRY"
-                }
-            })
-            player.setMediaItem(androidx.media3.common.MediaItem.fromUri(track.stream))
-            player.prepare(); player.playWhenReady = true
-        } catch (e: Exception) {
-            musicStatus?.text = "Unable to start stream · ${e.message ?: "Unknown error"}"
-            musicPlayButton?.text = "▶  RETRY"
-        }
-    }
-
-    private fun toggleMusicPlayback() {
-        val player = musicPlayer ?: run {
-            currentMusic?.let { playYtDlpTrack(it) } ?: toast("Choose a song first")
-            return
-        }
-        if (player.playbackState == androidx.media3.common.Player.STATE_IDLE || player.playbackState == androidx.media3.common.Player.STATE_ENDED) {
-            player.seekTo(0); player.play()
-        } else if (player.isPlaying) player.pause() else player.play()
-    }
-
-    private fun stopMusic(updateStatus: Boolean = true) {
-        musicProgressHandler.removeCallbacks(musicProgressRunnable)
-        musicPlayer?.release(); musicPlayer = null
-        if (updateStatus) {
-            currentMusic = null; musicStatus?.text = "Playback stopped"; musicPlayButton?.text = "▶  PLAY"
-            musicSeekBar?.progress = 0; musicElapsedView?.text = "0:00"; musicDurationView?.text = "0:00"
-            musicCoverView?.setImageResource(android.R.drawable.ic_media_play)
-        }
-    }
-
-    private fun loadMusicArtwork(rawUrl: String) {
+    private fun searchYouTubeMusic(raw:String,tracks:MutableList<MusicTrack>,adapter:BaseAdapter,info:TextView) {
+        val key=youtubeApiKey(); val query=raw.trim()
+        if(key.isBlank()) { info.text="Tap API KEY and add your YouTube Data API key."; return }
+        if(query.isEmpty()) return
+        val requestId=++musicSearchRequest; info.text="Searching YouTube…"
         Thread {
+            var connection:HttpURLConnection?=null
             try {
-                val conn = (URL(rawUrl).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 7000; readTimeout = 9000; instanceFollowRedirects = true
-                    setRequestProperty("User-Agent", "StrawhatPirate/1.1")
+                val endpoint="https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=20&q="+java.net.URLEncoder.encode(query,"UTF-8")+"&key="+java.net.URLEncoder.encode(key,"UTF-8")
+                connection=(URL(endpoint).openConnection() as HttpURLConnection).apply { connectTimeout=10000; readTimeout=15000; requestMethod="GET"; setRequestProperty("Accept","application/json") }
+                val code=connection.responseCode
+                val body=(if(code in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                if(code !in 200..299) {
+                    val message=try { org.json.JSONObject(body).getJSONObject("error").optString("message") } catch(_:Exception) { "HTTP $code" }
+                    throw IllegalStateException(message.ifBlank { "HTTP $code" })
                 }
-                val bitmap = try { conn.inputStream.use { android.graphics.BitmapFactory.decodeStream(it) } } finally { conn.disconnect() }
-                if (bitmap != null) runOnUiThread { musicCoverView?.setImageBitmap(bitmap) }
-            } catch (_: Exception) { }
+                val items=org.json.JSONObject(body).optJSONArray("items") ?: org.json.JSONArray()
+                val found=mutableListOf<MusicTrack>(); val seen=HashSet<String>()
+                for(i in 0 until items.length()) {
+                    val item=items.optJSONObject(i) ?: continue
+                    val id=item.optJSONObject("id")?.optString("videoId").orEmpty()
+                    val snippet=item.optJSONObject("snippet") ?: continue
+                    val title=snippet.optString("title").trim()
+                    if(id.isBlank() || title.isBlank() || !seen.add(id)) continue
+                    val thumbs=snippet.optJSONObject("thumbnails")
+                    val image=thumbs?.optJSONObject("medium")?.optString("url")?.takeIf { !it.isNullOrBlank() } ?: thumbs?.optJSONObject("default")?.optString("url").orEmpty()
+                    found.add(MusicTrack(id,title,snippet.optString("channelTitle"),"YouTube",0,image))
+                }
+                runOnUiThread { if(requestId!=musicSearchRequest) return@runOnUiThread; tracks.clear(); tracks.addAll(found); adapter.notifyDataSetChanged(); info.text=if(found.isEmpty()) "No videos found. Try another search." else "${found.size} official YouTube results · Tap a result to play" }
+            } catch(e:Exception) {
+                runOnUiThread { if(requestId!=musicSearchRequest) return@runOnUiThread; info.text="YouTube search failed · ${e.message ?: "Check API key and quota"}" }
+            } finally { connection?.disconnect() }
         }.start()
     }
 
-    private fun formatMusicTime(ms: Long): String {
-        if (ms < 0) return "0:00"
-        val seconds = ms / 1000
-        return "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
-    }
-
-    private fun updateMusicProgress() {
-        val player = musicPlayer
-        if (player != null && !seekingMusic) {
-            val duration = player.duration; val position = player.currentPosition
-            if (duration > 0) {
-                musicSeekBar?.progress = ((position.toDouble() / duration) * 1000).toInt().coerceIn(0, 1000)
-                musicDurationView?.text = formatMusicTime(duration)
-            }
-            musicElapsedView?.text = formatMusicTime(position)
-        }
-        if (musicPlayer != null) musicProgressHandler.postDelayed(musicProgressRunnable, 500)
+    private fun stopMusic(updateStatus:Boolean=true) {
+        musicEmbedView?.stopLoading()
+        musicEmbedView?.loadUrl("about:blank")
+        currentMusic=null
     }
 
     private fun featureChip(label: String) = TextView(this).apply {
@@ -1076,6 +843,7 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         mainHandler.removeCallbacks(catalogueRefresh)
         stopMusic(updateStatus = false)
+        musicEmbedView?.destroy()
         web.destroy()
         super.onDestroy()
     }
