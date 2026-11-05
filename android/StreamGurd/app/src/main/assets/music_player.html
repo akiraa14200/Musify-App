@@ -150,7 +150,7 @@ async function searchComico(wt){
       songs = items.map(item => {
         const raw = String(item.url || item.videoId || item.id || '');
         const queryId = raw.match(/[?&]v=([A-Za-z0-9_-]{11})/);
-        const shortId = raw.match(/youtu\\.be\\/([A-Za-z0-9_-]{11})/);
+        const shortId = raw.match(/youtu\.be\/([A-Za-z0-9_-]{11})/);
         const id = queryId?.[1] || shortId?.[1] || (String(item.id || '').match(/^[A-Za-z0-9_-]{11}$/)?.[0]) || '';
         if (!id) return null;
         const thumbs = item.thumbnails;
