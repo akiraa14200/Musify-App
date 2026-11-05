@@ -481,6 +481,8 @@ class MainActivity : Activity() {
     private fun showMusicPlayer() {
         val playerWeb = WebView(this).apply {
             setBackgroundColor(Color.rgb(8, 8, 10))
+            isFocusable = true
+            isFocusableInTouchMode = true
             overScrollMode = View.OVER_SCROLL_NEVER
             settings.apply {
                 javaScriptEnabled = true
@@ -521,6 +523,7 @@ class MainActivity : Activity() {
                 }
                 d.show()
                 d.window?.setBackgroundDrawableResource(android.R.color.transparent)
+                d.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
                 d.window?.setLayout(
                     (resources.displayMetrics.widthPixels * 0.98f).toInt(),
                     (resources.displayMetrics.heightPixels * 0.94f).toInt()
@@ -542,6 +545,13 @@ class MainActivity : Activity() {
 
         playerWeb.addJavascriptInterface(object {
             @JavascriptInterface fun minimizePlayer() { runOnUiThread { minimizeToAppBar() } }
+            @JavascriptInterface fun requestKeyboard() {
+                runOnUiThread {
+                    playerWeb.requestFocus()
+                    val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                    imm.showSoftInput(playerWeb, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+                }
+            }
             @JavascriptInterface fun expandPlayer() {
                 runOnUiThread {
                     if (isMini) {
