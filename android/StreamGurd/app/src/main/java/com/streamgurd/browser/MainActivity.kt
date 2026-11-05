@@ -498,7 +498,7 @@ class MainActivity : Activity() {
         }
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         header.addView(text("♫  MUSIC", 18f, Color.WHITE, true))
-        header.addView(text("  •  JioSaavn", 10f, 0xFF9DAEC8.toInt()))
+        header.addView(text("  •  yt-dlp", 10f, 0xFF9DAEC8.toInt()))
         header.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         val live = text("● READY", 10f, Color.rgb(170, 220, 210), true)
         header.addView(live)
@@ -529,17 +529,17 @@ class MainActivity : Activity() {
         dialogRoot.addView(searchRow, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(12) })
 
         val filterRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        var musicSource = "saavn"
-        val saavnTab = actionButton("SAAVN", true) {}
-        val youtubeTab = actionButton("YOUTUBE", false) {}
+        var musicSource = "youtube"
+        val saavnTab = actionButton("YOUTUBE MUSIC", true) {}
+        val youtubeTab = actionButton("API", false) {}
         val refreshMusic = actionButton("↻", false) {}
-        filterRow.addView(saavnTab, LinearLayout.LayoutParams(dp(94), dp(36)).apply { rightMargin = dp(7) })
+        filterRow.addView(saavnTab, LinearLayout.LayoutParams(dp(145), dp(36)).apply { rightMargin = dp(7) })
         filterRow.addView(youtubeTab, LinearLayout.LayoutParams(dp(104), dp(36)))
         filterRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         filterRow.addView(refreshMusic, LinearLayout.LayoutParams(dp(42), dp(36)))
         dialogRoot.addView(filterRow, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(10) })
 
-        val info = text("Search JioSaavn for songs and artists", 11f, 0xFFB7B7B7.toInt()).apply {
+        val info = text("Search YouTube songs and artists · yt-dlp", 11f, 0xFFB7B7B7.toInt()).apply {
             setPadding(dp(3), dp(6), dp(3), dp(5))
         }
         val infoRef = info
@@ -594,20 +594,10 @@ class MainActivity : Activity() {
         adapter = adapterRef
         list.adapter = adapter
         fun adapterRefreshPlaceholder() { adapter.notifyDataSetChanged() }
-        fun selectMusicSource(source: String) {
-            musicSource = source
-            saavnTab.alpha = if (source == "saavn") 1f else 0.55f
-            youtubeTab.alpha = if (source == "youtube") 1f else 0.55f
-            tracks.clear(); adapter.notifyDataSetChanged()
-            if (query.text.isNotBlank()) {
-                pendingMusicSearch?.let { musicSearchHandler.removeCallbacks(it) }
-                searchMusic(query.text.toString(), tracks, adapter, info, musicSource)
-            } else info.text = if (source == "youtube") "Search YouTube music through Piped" else "Search songs with JioSaavn"
-        }
-        saavnTab.setOnClickListener { selectMusicSource("saavn") }
-        youtubeTab.setOnClickListener { selectMusicSource("youtube") }
+        saavnTab.setOnClickListener { }
+        youtubeTab.setOnClickListener { configureMusicBackend(info) }
         refreshMusic.setOnClickListener {
-            if (query.text.isNotBlank()) searchMusic(query.text.toString(), tracks, adapter, info, musicSource)
+            if (query.text.isNotBlank()) searchMusic(query.text.toString(), tracks, adapter, info, "youtube")
         }
         dialogRoot.addView(info)
         dialogRoot.addView(list, LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(8) })
@@ -632,7 +622,7 @@ class MainActivity : Activity() {
         val statusText = text(currentMusic?.title ?: "Choose a song", 13f, Color.WHITE, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
         musicStatus = statusText
         nowText.addView(statusText)
-        val artistText = text(currentMusic?.artist ?: "JioSaavn", 10f, 0xFFBBBBBB.toInt()).apply { maxLines = 1 }
+        val artistText = text(currentMusic?.artist ?: "YouTube Music", 10f, 0xFFBBBBBB.toInt()).apply { maxLines = 1 }
         nowText.addView(artistText)
         mini.addView(nowText, LinearLayout.LayoutParams(0, -2, 1f))
         val play = actionButton(if (musicPlayer?.isPlaying == true) "Ⅱ" else "▶") { toggleMusicPlayback() }
@@ -651,7 +641,7 @@ class MainActivity : Activity() {
 
         val dialog = AlertDialog.Builder(this).setView(dialogRoot).create()
         close.setOnClickListener { dialog.dismiss() }
-        list.setOnItemClickListener { _, _, position, _ -> playJioSaavnTrack(tracks[position]) }
+        list.setOnItemClickListener { _, _, position, _ -> playYtDlpTrack(tracks[position]) }
         query.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH || actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
                 pendingMusicSearch?.let { musicSearchHandler.removeCallbacks(it) }
