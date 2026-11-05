@@ -532,6 +532,11 @@ class MainActivity : Activity() {
 
         fun expandInApp() {
             mini = false
+            homePanel.visibility = View.GONE
+            headerBar.visibility = View.GONE
+            statusRow.visibility = View.GONE
+            root.findViewWithTag<View>("top-actions-toggle")?.visibility = View.GONE
+            root.findViewWithTag<View>("top-actions-panel")?.visibility = View.GONE
             (playerWeb.parent as? ViewGroup)?.removeView(playerWeb)
             root.addView(playerWeb, FrameLayout.LayoutParams(-1, -1))
             playerWeb.visibility = View.VISIBLE
@@ -541,6 +546,10 @@ class MainActivity : Activity() {
 
         fun minimizeInApp() {
             mini = true
+            homePanel.visibility = View.VISIBLE
+            headerBar.visibility = View.VISIBLE
+            statusRow.visibility = View.VISIBLE
+            root.findViewWithTag<View>("top-actions-toggle")?.visibility = View.VISIBLE
             (playerWeb.parent as? ViewGroup)?.removeView(playerWeb)
             root.addView(playerWeb, FrameLayout.LayoutParams(-1, dp(96), Gravity.BOTTOM))
             playerWeb.visibility = View.VISIBLE
