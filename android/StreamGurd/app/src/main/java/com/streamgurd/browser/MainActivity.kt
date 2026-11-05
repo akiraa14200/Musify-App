@@ -948,13 +948,13 @@ class MainActivity : Activity() {
                     } catch (e: Exception) {
                         detail = e.javaClass.simpleName + (e.message?.let { ": $it" } ?: "")
                     } finally { searchConnection?.disconnect() }
-                    report.append("\${index + 1}. $host\n")
+                    report.append("${index + 1}. $host\n")
                         .append("   Search: $searchStatus · items: $itemCount\n")
-                        .append("   Stream: $streamStatus · audio: \${if (audioAvailable) "YES" else "NO"}\n")
+                        .append("   Stream: $streamStatus · audio: ${if (audioAvailable) "YES" else "NO"}\n")
                     if (detail.isNotBlank()) report.append("   Note: $detail\n")
                     report.append("\n")
                     val snapshot = report.toString()
-                    runOnUiThread { if (dialog.isShowing) output.text = "Testing \${index + 1}/\${hosts.size}…\n\n$snapshot" }
+                    runOnUiThread { if (dialog.isShowing) output.text = "Testing ${index + 1}/${hosts.size}…\n\n$snapshot" }
                 }
                 report.append("PASS = search returned a video ID and /streams returned an HTTPS audio stream.\n")
                     .append("This tests API availability only; it does not guarantee playback on every network.")
