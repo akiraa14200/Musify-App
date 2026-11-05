@@ -568,9 +568,11 @@ class MainActivity : Activity() {
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
-                mediaPlaybackRequiresUserGesture = true
+                mediaPlaybackRequiresUserGesture = false
                 javaScriptCanOpenWindowsAutomatically = false
                 setSupportMultipleWindows(false)
+                allowContentAccess = true
+                allowFileAccess = true
                 mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                 loadsImagesAutomatically = true
                 databaseEnabled = true
