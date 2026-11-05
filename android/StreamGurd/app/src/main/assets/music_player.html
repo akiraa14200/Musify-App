@@ -115,77 +115,61 @@ function onYouTubeIframeAPIReady(){
 }
 window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
 
-function setMiniMode(on){ document.body.classList.toggle('mini',on); document.getElementById('minimize').style.display=on?'none':'inline-block'; document.getElementById('expand').style.display=on?'inline-block':'none'; if(window.StreamGurd){ if(on) StreamGurd.minimizePlayer(); else StreamGurd.expandPlayer(); } }\ndocument.getElementById('minimize').onclick=()=>setMiniMode(true);\ndocument.getElementById('expand').onclick=()=>setMiniMode(false);
+function setMiniMode(on){ document.body.classList.toggle('mini',on); document.getElementById('minimize').style.display=on?'none':'inline-block'; document.getElementById('expand').style.display=on?'inline-block':'none'; if(window.StreamGurd){ if(on) StreamGurd.minimizePlayer(); else StreamGurd.expandPlayer(); } }
+document.getElementById('minimize').onclick=()=>setMiniMode(true);
+document.getElementById('expand').onclick=()=>setMiniMode(false);
 document.getElementById('closePlayer').onclick=()=>{if(window.StreamGurd&&StreamGurd.closePlayer)StreamGurd.closePlayer();};
 qEl.addEventListener('focus',()=>{ if(window.StreamGurd && StreamGurd.requestKeyboard) StreamGurd.requestKeyboard(); });
-qEl.addEventListener('click',()=>{ if(window.StreamGurd && StreamGurd.requestKeyboard) StreamGurd.requestKeyboard(); });\nfunction esc(t){ const d=document.createElement('div'); d.textContent=t||''; return d.innerHTML; }
+qEl.addEventListener('click',()=>{ if(window.StreamGurd && StreamGurd.requestKeyboard) StreamGurd.requestKeyboard(); });
+function esc(t){ const d=document.createElement('div'); d.textContent=t||''; return d.innerHTML; }
 function extractVideoId(item){ const raw=String(item.videoId||item.id||item.url||''); const m=raw.match(/(?:v=|youtu\.be\/|\/watch\/|^)([A-Za-z0-9_-]{11})(?:[&?/#]|$)/); return m?m[1]:(raw.length===11?raw:''); }
 
 async function searchComico(wt){
-  // EXACT code from Comico bundle:
-  // fetch(`https://pipedapi.kavin.rocks/search?q=${encodeURIComponent(wt)}&filter=music_songs`)
   const key = wt.toLowerCase();
-  if(cache.has(key)) return cache.get(key);
-
-  let s = [];
-  try{
-    let h = await fetch(`https://pipedapi.kavin.rocks/search?q=${encodeURIComponent(wt)}&filter=music_songs`);
-    if(h.ok){
-      let B = await h.json();
-      s = (B.items||B.results||[]).slice(0,12).map((F,Y)=>({
-        id: F.url?.split("v=")[1]||F.id||String(Y),
-        title: F.title||F.name||"Unknown",
-        artist: F.uploaderName||F.uploader||F.author||"Unknown",
-        artwork: F.thumbnail||F.thumbnails?.[0]?.url||`https://i.ytimg.com/vi/${F.url?.split("v=")[1]||F.id}/mqdefault.jpg`,
-        videoId: F.url?.split("v=")[1]||F.id,
-        url: F.url
-      }));
-    }
-  }catch(e){ console.log('primary failed', e); }
-
-  if(!s.length){
-    try{
-      let h = await fetch(`https://api.piped.private.coffee/search?q=${encodeURIComponent(wt)}&filter=music_songs`);
-      if(h.ok){
-        let data = await h.json();
-        s = (data.items||[]).slice(0,12).map((F,Y)=>({
-          id: F.url?.split("v=")[1]||String(Y),
-          title: F.title,
-          artist: F.uploaderName||"Unknown",
-          artwork: F.thumbnail||`https://i.ytimg.com/vi/${F.url?.split("v=")[1]}/mqdefault.jpg`,
-          videoId: F.url?.split("v=")[1],
-          url: F.url
-        }));
-      }
-    }catch{}
-  }
-
-  // extra fallbacks - same as MusicFix patch
-  if(!s.length){
-    const fallbacks = ['https://pipedapi.moomoo.me','https://pipedapi.syncpundit.io'];
-    for(let base of fallbacks){
-      try{
-        let h = await fetch(`${base}/search?q=${encodeURIComponent(wt)}&filter=music_songs`);
-        if(h.ok){
-          let B = await h.json();
-          s = (B.items||[]).slice(0,12).map((F,Y)=>({
-            id: F.url?.split("v=")[1]||String(Y),
-            title: F.title,
-            artist: F.uploaderName||"Unknown",
-            artwork: F.thumbnail,
-            videoId: F.url?.split("v=")[1],
-            url: F.url
-          }));
-          if(s.length) break;
-        }
-      }catch{}
+  if (cache.has(key)) return cache.get(key);
+  let songs = [];
+  const endpoints = [
+    'https://pipedapi.adminforge.de',
+    'https://pipedapi.reallyaweso.me',
+    'https://pipedapi.kavin.rocks',
+    'https://api.piped.private.coffee',
+    'https://pipedapi.moomoo.me'
+  ];
+  for (const base of endpoints) {
+    let timer;
+    try {
+      const controller = new AbortController();
+      timer = setTimeout(() => controller.abort(), 9000);
+      const response = await fetch(base + '/search?q=' + encodeURIComponent(wt) + '&filter=music_songs', {
+        headers: { 'Accept': 'application/json' }, signal: controller.signal
+      });
+      clearTimeout(timer);
+      if (!response.ok) continue;
+      const data = await response.json();
+      const items = data.items || data.results || [];
+      const mapped = items.slice(0, 15).map(item => {
+        const raw = String(item.url || item.videoId || item.id || '');
+        const match = raw.match(/(?:v=|youtu\\.be\\/|^)([A-Za-z0-9_-]{11})(?:[&?/#]|$)/);
+        const videoId = match ? match[1] : (raw.length === 11 ? raw : '');
+        if (!videoId) return null;
+        return {
+          id: videoId, videoId,
+          title: item.title || item.name || 'Unknown title',
+          artist: item.uploaderName || item.uploader || item.author || 'Unknown artist',
+          artwork: item.thumbnail || item.thumbnails?.[0]?.url || ('https://i.ytimg.com/vi/' + videoId + '/mqdefault.jpg'),
+          url: item.url || ('https://www.youtube.com/watch?v=' + videoId)
+        };
+      }).filter(Boolean);
+      if (mapped.length) { songs = mapped; break; }
+    } catch (error) {
+      console.warn('Search endpoint unavailable:', base, error);
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
-
-  cache.set(key, s);
-  return s;
+  cache.set(key, songs);
+  return songs;
 }
-
 function render(songs){
   queue = songs;
   if(!songs.length){
