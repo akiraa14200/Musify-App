@@ -479,11 +479,12 @@ class MainActivity : Activity() {
 
     private fun showMusicPlayer() {
         val tracks = mutableListOf<MusicTrack>()
+        lateinit var info: TextView
         val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16),dp(15),dp(16),dp(12)); background = darkGlassShape(0xF00B0E14.toInt(),26) }
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         header.addView(text("♫  YOUTUBE MUSIC",17f,Color.WHITE,true))
         header.addView(View(this),LinearLayout.LayoutParams(0,1,1f))
-        val info = text("Add a YouTube Data API key to search.",11f,0xFFB7B7B7.toInt())
+        info = text("Add a YouTube Data API key to search.",11f,0xFFB7B7B7.toInt())
         header.addView(actionButton("API KEY") { configureYouTubeApiKey(info) },LinearLayout.LayoutParams(dp(76),dp(36)))
         val close = actionButton("✕") {}
         header.addView(close,LinearLayout.LayoutParams(dp(42),dp(36)).apply { leftMargin=dp(7) })
