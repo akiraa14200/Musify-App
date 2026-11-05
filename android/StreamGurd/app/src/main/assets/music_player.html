@@ -7,9 +7,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',sans-serif}
-body{background:#070709;color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:12px}
-.player{width:100%;max-width:440px;height:calc(100vh - 24px);min-height:320px;background:#121212;border:1px solid rgba(255,255,255,0.1);border-radius:24px;overflow:hidden;display:flex;flex-direction:column;position:relative}
-.hdr{padding:16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,0.07)}
+html,body{width:100%;height:100%;overflow:hidden}body{background:transparent;color:#fff;display:flex;align-items:stretch;justify-content:stretch;padding:0}
+.player{width:100%;height:100%;min-height:0;background:#121212;border:0;border-radius:0;overflow:hidden;display:flex;flex-direction:column;position:relative}
+.hdr{padding:12px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,0.07);gap:8px}.hdr-right{display:flex;align-items:center;gap:8px}.collapse{width:30px;height:30px;border:0;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;font-size:18px;line-height:1}
 .hdr h2{font-size:16px;font-weight:800;display:flex;gap:8px;align-items:center}
 .hdr h2 b{width:26px;height:26px;background:#ff0000;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px}
 .badge{font-size:10px;background:rgba(255,255,255,0.08);padding:4px 8px;border-radius:999px;color:rgba(255,255,255,0.5)}
@@ -125,51 +125,55 @@ function esc(t){ const d=document.createElement('div'); d.textContent=t||''; ret
 function extractVideoId(item){ const raw=String(item.videoId||item.id||item.url||''); const m=raw.match(/(?:v=|youtu\.be\/|\/watch\/|^)([A-Za-z0-9_-]{11})(?:[&?/#]|$)/); return m?m[1]:(raw.length===11?raw:''); }
 
 async function searchComico(wt){
-  const key = wt.toLowerCase();
+  const key = wt.trim().toLowerCase();
   if (cache.has(key)) return cache.get(key);
-  let songs = [];
   const endpoints = [
     'https://pipedapi.adminforge.de',
     'https://pipedapi.reallyaweso.me',
-    'https://pipedapi.kavin.rocks',
     'https://api.piped.private.coffee',
+    'https://pipedapi.kavin.rocks',
     'https://pipedapi.moomoo.me'
   ];
+  let songs = [];
   for (const base of endpoints) {
-    let timer;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 7000);
     try {
-      const controller = new AbortController();
-      timer = setTimeout(() => controller.abort(), 9000);
       const response = await fetch(base + '/search?q=' + encodeURIComponent(wt) + '&filter=music_songs', {
-        headers: { 'Accept': 'application/json' }, signal: controller.signal
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        signal: controller.signal
       });
-      clearTimeout(timer);
       if (!response.ok) continue;
       const data = await response.json();
-      const items = data.items || data.results || [];
-      const mapped = items.slice(0, 15).map(item => {
+      const items = Array.isArray(data.items) ? data.items : (Array.isArray(data.results) ? data.results : []);
+      songs = items.map(item => {
         const raw = String(item.url || item.videoId || item.id || '');
-        const match = raw.match(/[?&]v=([A-Za-z0-9_-]{11})/) || raw.match(/([A-Za-z0-9_-]{11})/);
-        const videoId = match ? match[1] : (raw.length === 11 ? raw : '');
-        if (!videoId) return null;
+        const queryId = raw.match(/[?&]v=([A-Za-z0-9_-]{11})/);
+        const shortId = raw.match(/youtu\\.be\\/([A-Za-z0-9_-]{11})/);
+        const id = queryId?.[1] || shortId?.[1] || (String(item.id || '').match(/^[A-Za-z0-9_-]{11}$/)?.[0]) || '';
+        if (!id) return null;
+        const thumbs = item.thumbnails;
+        const thumb = item.thumbnail || (Array.isArray(thumbs) ? (thumbs[0]?.url || thumbs[0]) : '');
         return {
-          id: videoId, videoId,
+          id, videoId: id,
           title: item.title || item.name || 'Unknown title',
           artist: item.uploaderName || item.uploader || item.author || 'Unknown artist',
-          artwork: item.thumbnail || item.thumbnails?.[0]?.url || ('https://i.ytimg.com/vi/' + videoId + '/mqdefault.jpg'),
-          url: item.url || ('https://www.youtube.com/watch?v=' + videoId)
+          artwork: thumb || 'https://i.ytimg.com/vi/' + id + '/mqdefault.jpg',
+          url: 'https://www.youtube.com/watch?v=' + id
         };
-      }).filter(Boolean);
-      if (mapped.length) { songs = mapped; break; }
+      }).filter(Boolean).slice(0, 15);
+      if (songs.length) break;
     } catch (error) {
-      console.warn('Search endpoint unavailable:', base, error);
+      console.warn('Music search endpoint failed:', base, error);
     } finally {
-      if (timer) clearTimeout(timer);
+      clearTimeout(timeout);
     }
   }
   cache.set(key, songs);
   return songs;
 }
+
 function render(songs){
   queue = songs;
   if(!songs.length){
@@ -220,7 +224,10 @@ function playAt(i){
   }
 }
 
-// search input - same debounce as Comico: 500ms
+qEl.addEventListener('focus',()=>{ if(window.StreamGurd?.requestKeyboard) StreamGurd.requestKeyboard(); });
+qEl.addEventListener('click',()=>{ if(window.StreamGurd?.requestKeyboard) StreamGurd.requestKeyboard(); });
+
+// search input - debounced search
 qEl.addEventListener('input', e=>{
   const wt = e.target.value.trim();
   if(debounce) clearTimeout(debounce);
@@ -248,7 +255,7 @@ qEl.addEventListener('input', e=>{
 });
 
 // controls - same as Comico ml()
-document.getElementById('play').onclick = ()=>{
+document.getElementById('collapse').onclick = ()=>{ if(window.StreamGurd?.collapsePlayer) StreamGurd.collapsePlayer(); };\ndocument.getElementById('play').onclick = ()=>{
   if(!ytPlayer) return;
   if(isPlaying){
     try{ ytPlayer.pauseVideo(); isPlaying=false; document.getElementById('play').textContent='Play'; document.getElementById('bars').style.display='none'; }catch{}
