@@ -255,7 +255,8 @@ qEl.addEventListener('input', e=>{
 });
 
 // controls - same as Comico ml()
-document.getElementById('collapse').onclick = ()=>{ if(window.StreamGurd?.collapsePlayer) StreamGurd.collapsePlayer(); };\ndocument.getElementById('play').onclick = ()=>{
+document.getElementById('collapse').onclick = ()=>{ if(window.StreamGurd?.collapsePlayer) StreamGurd.collapsePlayer(); };
+document.getElementById('play').onclick = ()=>{
   if(!ytPlayer) return;
   if(isPlaying){
     try{ ytPlayer.pauseVideo(); isPlaying=false; document.getElementById('play').textContent='Play'; document.getElementById('bars').style.display='none'; }catch{}
