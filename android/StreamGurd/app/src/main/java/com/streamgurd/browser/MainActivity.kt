@@ -211,7 +211,6 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(-1, dp(44)).apply { bottomMargin = dp(7) })
         }
         addFeature("♫  Music Player · YouTube Music", ::showMusicPlayer)
-        addFeature("⌕  Test YouTube Music Servers", ::runyt-dlpDiagnostics)
         addFeature("＋  Add Website", ::addLink)
         addFeature("☆  Saved Websites", ::showSaved)
         addFeature("☷  Anime & Manga Sites", ::showCatalogue)
