@@ -119,6 +119,7 @@ function setMiniMode(on){ document.body.classList.toggle('mini',on); document.ge
 document.getElementById('closePlayer').onclick=()=>{if(window.StreamGurd&&StreamGurd.closePlayer)StreamGurd.closePlayer();};
 qEl.addEventListener('focus',()=>{ if(window.StreamGurd && StreamGurd.requestKeyboard) StreamGurd.requestKeyboard(); });
 qEl.addEventListener('click',()=>{ if(window.StreamGurd && StreamGurd.requestKeyboard) StreamGurd.requestKeyboard(); });\nfunction esc(t){ const d=document.createElement('div'); d.textContent=t||''; return d.innerHTML; }
+function extractVideoId(item){ const raw=String(item.videoId||item.id||item.url||''); const m=raw.match(/(?:v=|youtu\.be\/|\/watch\/|^)([A-Za-z0-9_-]{11})(?:[&?/#]|$)/); return m?m[1]:(raw.length===11?raw:''); }
 
 async function searchComico(wt){
   // EXACT code from Comico bundle:
@@ -256,6 +257,8 @@ qEl.addEventListener('input', e=>{
     }catch(err){
       ov.classList.remove('on'); spin.classList.remove('on');
       console.log(err);
+      listEl.innerHTML = `<div class="empty"><div class="ic">⚠️</div><div>Search service unavailable</div><div style="font-size:11px;margin-top:6px">Please try again in a moment.</div></div>`;
+      badge.textContent = 'Search unavailable';
     }
   }, 500); // same 500ms as Comico
 });
