@@ -503,7 +503,7 @@ class MainActivity : Activity() {
             settings.javaScriptEnabled=true; settings.domStorageEnabled=true; settings.mediaPlaybackRequiresUserGesture=true
             settings.javaScriptCanOpenWindowsAutomatically=false; settings.setSupportMultipleWindows(false)
             settings.mixedContentMode=WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            settings.userAgentString=settings.userAgentString.replace("; wv","")
+             // Keep Android WebView identity intact for YouTube embedded-player verification.
             CookieManager.getInstance().setAcceptCookie(true); CookieManager.getInstance().setAcceptThirdPartyCookies(this,true)
             webChromeClient=WebChromeClient(); webViewClient=WebViewClient()
         }
@@ -535,7 +535,7 @@ class MainActivity : Activity() {
         list.setOnItemClickListener { _,_,position,_ ->
             val track=tracks.getOrNull(position) ?: return@setOnItemClickListener
             currentMusic=track; playing.text="NOW PLAYING · ${track.title}"
-            val html="<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'></head><body style='margin:0;background:#000'><iframe width='100%' height='218' src='https://www.youtube.com/embed/${track.id}?playsinline=1&rel=0' title='YouTube video player' frameborder='0' allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share' referrerpolicy='strict-origin-when-cross-origin' allowfullscreen></iframe></body></html>"
+            val html="<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'></head><body style='margin:0;background:#000'><iframe width='100%' height='218' src='https://www.youtube.com/embed/${track.id}?playsinline=1&controls=1&rel=0&fs=1' title='YouTube embedded player' frameborder='0' allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share' referrerpolicy='strict-origin-when-cross-origin' allowfullscreen></iframe></body></html>"
             playerWeb.loadDataWithBaseURL("https://www.youtube.com/",html,"text/html","UTF-8",null)
             adapter.notifyDataSetChanged()
         }
