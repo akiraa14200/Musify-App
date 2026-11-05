@@ -479,9 +479,6 @@ class MainActivity : Activity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun showMusicPlayer() {
-        // Load the supplied React/Tailwind player as a real Android WebView screen.
-        // The HTTPS base URL is intentional: the reference HTML detects file:// and
-        // switches to its offline preview instead of initializing YouTube's IFrame API.
         val playerWeb = WebView(this).apply {
             setBackgroundColor(Color.rgb(8, 8, 10))
             overScrollMode = View.OVER_SCROLL_NEVER
@@ -501,8 +498,6 @@ class MainActivity : Activity() {
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                     val uri = request?.url ?: return true
-                    // Keep playback and navigation inside the player. External links are
-                    // not allowed to replace the browser's main page.
                     return uri.scheme !in listOf("https", "http")
                 }
             }
@@ -510,9 +505,25 @@ class MainActivity : Activity() {
         musicEmbedView = playerWeb
         currentMusic = null
 
-        val dialog = AlertDialog.Builder(this)
-            .setView(playerWeb)
-            .create()
+        val dialog = AlertDialog.Builder(this).setView(playerWeb).create()
+        var minimized = false
+        fun resizePlayer(mini: Boolean) {
+            minimized = mini
+            val window = dialog.window ?: return
+            window.setBackgroundDrawableResource(android.R.color.transparent)
+            val width = if (mini) -1 else (resources.displayMetrics.widthPixels * 0.98f).toInt()
+            val height = if (mini) dp(90) else (resources.displayMetrics.heightPixels * 0.94f).toInt()
+            window.setLayout(width, height)
+            window.setGravity(if (mini) Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL else Gravity.CENTER)
+            val params = window.attributes
+            params.dimAmount = if (mini) 0f else 0.35f
+            window.attributes = params
+        }
+        playerWeb.addJavascriptInterface(object {
+            @JavascriptInterface fun minimizePlayer() { runOnUiThread { resizePlayer(true) } }
+            @JavascriptInterface fun expandPlayer() { runOnUiThread { resizePlayer(false) } }
+        }, "StreamGurd")
+
         dialog.setOnDismissListener {
             playerWeb.stopLoading()
             playerWeb.loadUrl("about:blank")
@@ -521,21 +532,11 @@ class MainActivity : Activity() {
             currentMusic = null
         }
         dialog.show()
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        dialog.window?.setLayout(
-            (resources.displayMetrics.widthPixels * 0.98f).toInt(),
-            (resources.displayMetrics.heightPixels * 0.94f).toInt()
-        )
+        resizePlayer(false)
 
         try {
             val html = assets.open("music_player.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
-            playerWeb.loadDataWithBaseURL(
-                "https://appassets.androidplatform.net/",
-                html,
-                "text/html",
-                "UTF-8",
-                null
-            )
+            playerWeb.loadDataWithBaseURL("https://appassets.androidplatform.net/", html, "text/html", "UTF-8", null)
         } catch (e: Exception) {
             toast("Music player could not be loaded: ${e.message ?: "asset missing"}")
             dialog.dismiss()
