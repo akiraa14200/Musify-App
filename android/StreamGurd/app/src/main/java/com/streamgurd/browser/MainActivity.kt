@@ -477,83 +477,69 @@ class MainActivity : Activity() {
         if(cachedCatalogue("Anime").isEmpty() || cachedCatalogue("Manga").isEmpty()) refreshCatalogue(false)
     }
 
+    @SuppressLint("SetJavaScriptEnabled")
     private fun showMusicPlayer() {
-        val tracks = mutableListOf<MusicTrack>()
-        lateinit var info: TextView
-        val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16),dp(15),dp(16),dp(12)); background = darkGlassShape(0xF00B0E14.toInt(),26) }
-        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        header.addView(text("♫  YOUTUBE MUSIC",17f,Color.WHITE,true))
-        header.addView(View(this),LinearLayout.LayoutParams(0,1,1f))
-        info = text("Add a YouTube Data API key to search.",11f,0xFFB7B7B7.toInt())
-        header.addView(actionButton("API KEY") { configureYouTubeApiKey(info) },LinearLayout.LayoutParams(dp(76),dp(36)))
-        val close = actionButton("✕") {}
-        header.addView(close,LinearLayout.LayoutParams(dp(42),dp(36)).apply { leftMargin=dp(7) })
-        panel.addView(header)
-        val searchRow = LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL; setPadding(dp(12),0,dp(5),0); background=GradientDrawable().apply { setColor(0xFF171D28.toInt()); cornerRadius=dp(18).toFloat(); setStroke(dp(1),0x665F789D.toInt()) } }
-        searchRow.addView(text("⌕",25f,Color.WHITE),LinearLayout.LayoutParams(dp(34),dp(48)))
-        val query = EditText(this).apply { hint="Search songs, artists, albums…"; setSingleLine(true); setTextColor(Color.WHITE); setHintTextColor(0xFFAAAAAA.toInt()); textSize=14f; background=android.graphics.drawable.ColorDrawable(Color.TRANSPARENT); setPadding(dp(2),0,dp(2),0); imeOptions=android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH; inputType=android.text.InputType.TYPE_CLASS_TEXT }
-        searchRow.addView(query,LinearLayout.LayoutParams(0,dp(50),1f))
-        searchRow.addView(actionButton("×") { query.text.clear() },LinearLayout.LayoutParams(dp(38),dp(38)))
-        panel.addView(searchRow,LinearLayout.LayoutParams(-1,dp(54)).apply { topMargin=dp(12) })
-        panel.addView(info,LinearLayout.LayoutParams(-1,dp(30)))
-        val playing = text("NOW PLAYING · Select a result",10f,0xFFD0D0D0.toInt(),true)
-        panel.addView(playing)
+        // Load the supplied React/Tailwind player as a real Android WebView screen.
+        // The HTTPS base URL is intentional: the reference HTML detects file:// and
+        // switches to its offline preview instead of initializing YouTube's IFrame API.
         val playerWeb = WebView(this).apply {
-            setBackgroundColor(Color.BLACK)
-            settings.javaScriptEnabled=true; settings.domStorageEnabled=true; settings.mediaPlaybackRequiresUserGesture=true
-            settings.javaScriptCanOpenWindowsAutomatically=false; settings.setSupportMultipleWindows(false)
-            settings.mixedContentMode=WebSettings.MIXED_CONTENT_NEVER_ALLOW
-             // Keep Android WebView identity intact for YouTube embedded-player verification.
-            CookieManager.getInstance().setAcceptCookie(true); CookieManager.getInstance().setAcceptThirdPartyCookies(this,true)
-            webChromeClient=WebChromeClient(); webViewClient=WebViewClient()
-        }
-        musicEmbedView=playerWeb
-        panel.addView(playerWeb,LinearLayout.LayoutParams(-1,dp(218)).apply { bottomMargin=dp(8) })
-        val list=ListView(this).apply { divider=android.graphics.drawable.ColorDrawable(0x35FFFFFF); dividerHeight=dp(1); cacheColorHint=Color.TRANSPARENT; background=android.graphics.drawable.ColorDrawable(Color.TRANSPARENT) }
-        val adapter=object: BaseAdapter() {
-            override fun getCount()=tracks.size
-            override fun getItem(position:Int)=tracks[position]
-            override fun getItemId(position:Int)=tracks[position].id.hashCode().toLong()
-            override fun getView(position:Int,convertView:View?,parent:ViewGroup?):View {
-                val track=tracks[position]
-                val row=LinearLayout(this@MainActivity).apply { gravity=Gravity.CENTER_VERTICAL; setPadding(dp(4),dp(7),dp(5),dp(7)); background=if(currentMusic?.id==track.id) shape(0x553F3F3F.toInt(),13) else android.graphics.drawable.ColorDrawable(Color.TRANSPARENT) }
-                val art=ImageView(this@MainActivity).apply { layoutParams=LinearLayout.LayoutParams(dp(58),dp(58)); scaleType=ImageView.ScaleType.CENTER_CROP; background=shape(0xFF303034.toInt(),12); setImageResource(android.R.drawable.ic_media_play); tag=track.image }
-                if(track.image.isNotBlank()) Thread { try { val c=URL(track.image).openConnection() as HttpURLConnection; c.connectTimeout=6000; c.readTimeout=8000; val bmp=try { c.inputStream.use { android.graphics.BitmapFactory.decodeStream(it) } } finally { c.disconnect() }; if(bmp!=null) runOnUiThread { if(art.tag==track.image) art.setImageBitmap(bmp) } } catch(_:Exception){} }.start()
-                row.addView(art)
-                val details=LinearLayout(this@MainActivity).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(10),0,dp(5),0) }
-                details.addView(text(track.title,13f,Color.WHITE,true).apply { maxLines=2; ellipsize=android.text.TextUtils.TruncateAt.END })
-                details.addView(text(track.artist,10f,0xFFB8B8B8.toInt()).apply { maxLines=1 })
-                row.addView(details,LinearLayout.LayoutParams(0,-2,1f))
-                row.addView(text("▶",17f,Color.WHITE,true).apply { setPadding(dp(8),dp(4),dp(8),dp(4)) })
-                return row
+            setBackgroundColor(Color.rgb(8, 8, 10))
+            overScrollMode = View.OVER_SCROLL_NEVER
+            settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                mediaPlaybackRequiresUserGesture = true
+                javaScriptCanOpenWindowsAutomatically = false
+                setSupportMultipleWindows(false)
+                mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                loadsImagesAutomatically = true
+                databaseEnabled = true
+            }
+            CookieManager.getInstance().setAcceptCookie(true)
+            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+            webChromeClient = WebChromeClient()
+            webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                    val uri = request?.url ?: return true
+                    // Keep playback and navigation inside the player. External links are
+                    // not allowed to replace the browser's main page.
+                    return uri.scheme !in listOf("https", "http")
+                }
             }
         }
-        list.adapter=adapter
-        panel.addView(list,LinearLayout.LayoutParams(-1,0,1f))
-        val dialog=AlertDialog.Builder(this).setView(panel).create()
-        close.setOnClickListener { dialog.dismiss() }
-        list.setOnItemClickListener { _,_,position,_ ->
-            val track=tracks.getOrNull(position) ?: return@setOnItemClickListener
-            currentMusic=track; playing.text="NOW PLAYING · ${track.title}"
-            val html="<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'></head><body style='margin:0;background:#000'><iframe width='100%' height='218' src='https://www.youtube.com/embed/${track.id}?playsinline=1&controls=1&rel=0&fs=1' title='YouTube embedded player' frameborder='0' allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share' referrerpolicy='strict-origin-when-cross-origin' allowfullscreen></iframe></body></html>"
-            playerWeb.loadDataWithBaseURL("https://www.youtube.com/",html,"text/html","UTF-8",null)
-            adapter.notifyDataSetChanged()
+        musicEmbedView = playerWeb
+        currentMusic = null
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(playerWeb)
+            .create()
+        dialog.setOnDismissListener {
+            playerWeb.stopLoading()
+            playerWeb.loadUrl("about:blank")
+            playerWeb.destroy()
+            if (musicEmbedView === playerWeb) musicEmbedView = null
+            currentMusic = null
         }
-        query.setOnEditorActionListener { _,id,_ -> if(id==android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH || id==android.view.inputmethod.EditorInfo.IME_ACTION_DONE) { pendingMusicSearch?.let { musicSearchHandler.removeCallbacks(it) }; searchYouTubeMusic(query.text.toString(),tracks,adapter,info); query.clearFocus(); true } else false }
-        query.addTextChangedListener(object:android.text.TextWatcher {
-            override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}
-            override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int) {
-                val value=s?.toString().orEmpty(); pendingMusicSearch?.let { musicSearchHandler.removeCallbacks(it) }
-                if(value.trim().isEmpty()) { ++musicSearchRequest; tracks.clear(); adapter.notifyDataSetChanged(); info.text="Search YouTube songs, artists and albums"; return }
-                info.text="Searching YouTube…"
-                val task=Runnable { searchYouTubeMusic(value,tracks,adapter,info) }; pendingMusicSearch=task; musicSearchHandler.postDelayed(task,450L)
-            }
-            override fun afterTextChanged(s:android.text.Editable?){}
-        })
-        dialog.setOnDismissListener { pendingMusicSearch?.let { musicSearchHandler.removeCallbacks(it) }; ++musicSearchRequest; playerWeb.stopLoading(); playerWeb.loadUrl("about:blank"); playerWeb.destroy(); musicEmbedView=null; currentMusic=null }
-        dialog.show(); dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        dialog.window?.setLayout((resources.displayMetrics.widthPixels*0.97f).toInt(),(resources.displayMetrics.heightPixels*0.92f).toInt())
-        if(youtubeApiKey().isBlank()) info.text="Tap API KEY and add your own YouTube Data API key."
+        dialog.show()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.98f).toInt(),
+            (resources.displayMetrics.heightPixels * 0.94f).toInt()
+        )
+
+        try {
+            val html = assets.open("music_player.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
+            playerWeb.loadDataWithBaseURL(
+                "https://appassets.androidplatform.net/",
+                html,
+                "text/html",
+                "UTF-8",
+                null
+            )
+        } catch (e: Exception) {
+            toast("Music player could not be loaded: ${e.message ?: "asset missing"}")
+            dialog.dismiss()
+        }
     }
 
     private fun youtubeApiKey(): String = prefs.getString("youtube_data_api_key","").orEmpty().trim()
