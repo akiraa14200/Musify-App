@@ -30,6 +30,8 @@ class MainActivity : Activity() {
     private var pendingMusicSearch: Runnable? = null
     private var currentMusic: MusicTrack? = null
     private var musicEmbedView: WebView? = null
+    private var musicPanel: FrameLayout? = null
+    private var musicFab: TextView? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val catalogueRefresh = object : Runnable {
         override fun run() {
@@ -313,6 +315,70 @@ class MainActivity : Activity() {
         web.visibility = View.GONE
         peekButton = actionButton("◉") { toggleBrowserChrome() }.apply { textSize = 18f; visibility = View.GONE; elevation = dp(8).toFloat() }
         root.addView(peekButton, FrameLayout.LayoutParams(dp(42), dp(42), Gravity.END or Gravity.BOTTOM).apply { rightMargin = dp(10); bottomMargin = dp(10) })
+        musicFab = TextView(this).apply {
+            text = "♫"
+            textSize = 23f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.rgb(210, 28, 42))
+                setStroke(dp(1), Color.argb(90, 255, 255, 255))
+            }
+            elevation = dp(20).toFloat()
+            contentDescription = "Open floating music player"
+        }
+        val musicFabParams = FrameLayout.LayoutParams(dp(54), dp(54), Gravity.BOTTOM or Gravity.END).apply {
+            rightMargin = dp(16)
+            bottomMargin = dp(86)
+        }
+        root.addView(musicFab, musicFabParams)
+        var musicDownX = 0f
+        var musicDownY = 0f
+        var musicStartLeft = 0
+        var musicStartTop = 0
+        var musicDragged = false
+        musicFab?.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    musicDownX = event.rawX; musicDownY = event.rawY
+                    val lp = view.layoutParams as FrameLayout.LayoutParams
+                    musicStartLeft = lp.leftMargin; musicStartTop = lp.topMargin
+                    musicDragged = false
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = (event.rawX - musicDownX).toInt()
+                    val dy = (event.rawY - musicDownY).toInt()
+                    if (kotlin.math.abs(dx) > dp(6) || kotlin.math.abs(dy) > dp(6)) musicDragged = true
+                    if (musicDragged) {
+                        val lp = view.layoutParams as FrameLayout.LayoutParams
+                        lp.gravity = Gravity.TOP or Gravity.START
+                        lp.leftMargin = (musicStartLeft + dx).coerceIn(0, (root.width - view.width).coerceAtLeast(0))
+                        lp.topMargin = (musicStartTop + dy).coerceIn(0, (root.height - view.height).coerceAtLeast(0))
+                        view.layoutParams = lp
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (musicDragged) {
+                        val lp = view.layoutParams as FrameLayout.LayoutParams
+                        prefs.edit().putInt("music_fab_x", lp.leftMargin).putInt("music_fab_y", lp.topMargin).apply()
+                    } else view.performClick()
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> true
+                else -> true
+            }
+        }
+        musicFab?.setOnClickListener {
+            if (musicPanel == null) showMusicPlayer()
+            else {
+                val panel = musicPanel!!
+                panel.visibility = if (panel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                musicFab?.text = if (panel.visibility == View.VISIBLE) "×" else "♫"
+            }
+        }
         setContentView(root)
         web.visibility = View.GONE
         showHome()
@@ -479,16 +545,13 @@ class MainActivity : Activity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun showMusicPlayer() {
-        // Music is an in-app destination, not a dialog or a second Activity.
-        musicEmbedView?.let { existing ->
-            if (existing.parent == null) {
-                root.addView(existing, FrameLayout.LayoutParams(-1, -1))
-                existing.visibility = View.VISIBLE
-            }
+        musicPanel?.let { panel ->
+            panel.visibility = View.VISIBLE
+            musicFab?.text = "×"
             return
         }
         val playerWeb = WebView(this).apply {
-            setBackgroundColor(Color.rgb(8, 8, 10))
+            setBackgroundColor(Color.TRANSPARENT)
             isFocusable = true
             isFocusableInTouchMode = true
             overScrollMode = View.OVER_SCROLL_NEVER
@@ -498,91 +561,55 @@ class MainActivity : Activity() {
                 mediaPlaybackRequiresUserGesture = true
                 javaScriptCanOpenWindowsAutomatically = false
                 setSupportMultipleWindows(false)
-                mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                 loadsImagesAutomatically = true
                 databaseEnabled = true
             }
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
             webChromeClient = WebChromeClient()
-            webViewClient = object : WebViewClient() {
-                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                    val uri = request?.url ?: return true
-                    return uri.scheme !in listOf("https", "http")
-                }
-            }
+            webViewClient = WebViewClient()
         }
         musicEmbedView = playerWeb
-        currentMusic = null
-        var mini = false
-
-        fun restoreBrowser() {
-            (playerWeb.parent as? ViewGroup)?.removeView(playerWeb)
-            playerWeb.stopLoading()
-            playerWeb.loadUrl("about:blank")
-            playerWeb.destroy()
-            musicEmbedView = null
-            currentMusic = null
-            homePanel.visibility = View.VISIBLE
-            headerBar.visibility = View.VISIBLE
-            statusRow.visibility = View.VISIBLE
-            root.findViewWithTag<View>("top-actions-toggle")?.visibility = View.VISIBLE
-            root.findViewWithTag<View>("top-actions-panel")?.visibility = View.GONE
+        val panel = FrameLayout(this).apply {
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(12, 13, 16))
+                cornerRadius = dp(22).toFloat()
+                setStroke(dp(1), Color.argb(65, 255, 255, 255))
+            }
+            clipToOutline = true
+            elevation = dp(24).toFloat()
         }
+        musicPanel = panel
+        panel.addView(playerWeb, FrameLayout.LayoutParams(-1, -1))
+        val panelWidth = minOf(dp(360), (resources.displayMetrics.widthPixels - dp(24)).coerceAtLeast(dp(260)))
+        val panelHeight = minOf(dp(520), (resources.displayMetrics.heightPixels - dp(150)).coerceAtLeast(dp(340)))
+        root.addView(panel, FrameLayout.LayoutParams(panelWidth, panelHeight, Gravity.BOTTOM or Gravity.END).apply {
+            rightMargin = dp(12)
+            bottomMargin = dp(76)
+        })
+        musicFab?.text = "×"
 
-        fun expandInApp() {
-            mini = false
-            homePanel.visibility = View.GONE
-            headerBar.visibility = View.GONE
-            statusRow.visibility = View.GONE
-            root.findViewWithTag<View>("top-actions-toggle")?.visibility = View.GONE
-            root.findViewWithTag<View>("top-actions-panel")?.visibility = View.GONE
-            (playerWeb.parent as? ViewGroup)?.removeView(playerWeb)
-            root.addView(playerWeb, FrameLayout.LayoutParams(-1, -1))
-            playerWeb.visibility = View.VISIBLE
-            playerWeb.evaluateJavascript("document.body.classList.remove('mini');document.getElementById('minimize').style.display='inline-block';document.getElementById('expand').style.display='none';", null)
-            playerWeb.requestFocus()
+        fun hidePlayer() {
+            panel.visibility = View.GONE
+            musicFab?.text = "♫"
         }
-
-        fun minimizeInApp() {
-            mini = true
-            homePanel.visibility = View.VISIBLE
-            headerBar.visibility = View.VISIBLE
-            statusRow.visibility = View.VISIBLE
-            root.findViewWithTag<View>("top-actions-toggle")?.visibility = View.VISIBLE
-            (playerWeb.parent as? ViewGroup)?.removeView(playerWeb)
-            root.addView(playerWeb, FrameLayout.LayoutParams(-1, dp(96), Gravity.BOTTOM))
-            playerWeb.visibility = View.VISIBLE
-            playerWeb.evaluateJavascript("document.body.classList.add('mini');document.getElementById('minimize').style.display='none';document.getElementById('expand').style.display='inline-block';", null)
-        }
-
         playerWeb.addJavascriptInterface(object {
-            @JavascriptInterface fun minimizePlayer() { runOnUiThread { minimizeInApp() } }
-            @JavascriptInterface fun expandPlayer() { runOnUiThread { if (mini) expandInApp() } }
+            @JavascriptInterface fun collapsePlayer() { runOnUiThread { hidePlayer() } }
+            @JavascriptInterface fun closePlayer() { runOnUiThread { hidePlayer() } }
             @JavascriptInterface fun requestKeyboard() {
                 runOnUiThread {
                     playerWeb.requestFocus()
-                    playerWeb.requestFocusFromTouch()
                     val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
                     imm.showSoftInput(playerWeb, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
                 }
             }
-            @JavascriptInterface fun closePlayer() { runOnUiThread { restoreBrowser() } }
         }, "StreamGurd")
-
-        // Hide the browser home controls while the player is the active app screen.
-        homePanel.visibility = View.GONE
-        headerBar.visibility = View.GONE
-        statusRow.visibility = View.GONE
-        root.findViewWithTag<View>("top-actions-toggle")?.visibility = View.GONE
-        root.findViewWithTag<View>("top-actions-panel")?.visibility = View.GONE
-        root.addView(playerWeb, FrameLayout.LayoutParams(-1, -1))
-        playerWeb.requestFocus()
         try {
             val html = assets.open("music_player.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
             playerWeb.loadDataWithBaseURL("https://appassets.androidplatform.net/", html, "text/html", "UTF-8", null)
         } catch (e: Exception) {
-            restoreBrowser()
+            panel.visibility = View.GONE
             toast("Music player could not be loaded: ${e.message ?: "asset missing"}")
         }
     }
