@@ -479,6 +479,14 @@ class MainActivity : Activity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun showMusicPlayer() {
+        // Music is an in-app destination, not a dialog or a second Activity.
+        musicEmbedView?.let { existing ->
+            if (existing.parent == null) {
+                root.addView(existing, FrameLayout.LayoutParams(-1, -1))
+                existing.visibility = View.VISIBLE
+            }
+            return
+        }
         val playerWeb = WebView(this).apply {
             setBackgroundColor(Color.rgb(8, 8, 10))
             isFocusable = true
@@ -506,69 +514,67 @@ class MainActivity : Activity() {
         }
         musicEmbedView = playerWeb
         currentMusic = null
-        var dialog: AlertDialog? = null
-        var isMini = false
+        var mini = false
 
-        fun showExpanded() {
+        fun restoreBrowser() {
             (playerWeb.parent as? ViewGroup)?.removeView(playerWeb)
-            dialog = AlertDialog.Builder(this).setView(playerWeb).create().also { d ->
-                d.setOnDismissListener {
-                    if (!isMini) {
-                        playerWeb.stopLoading()
-                        playerWeb.loadUrl("about:blank")
-                        playerWeb.destroy()
-                        if (musicEmbedView === playerWeb) musicEmbedView = null
-                        currentMusic = null
-                    }
-                }
-                d.show()
-                d.window?.setBackgroundDrawableResource(android.R.color.transparent)
-                d.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
-                d.window?.setLayout(
-                    (resources.displayMetrics.widthPixels * 0.98f).toInt(),
-                    (resources.displayMetrics.heightPixels * 0.94f).toInt()
-                )
-            }
-            isMini = false
+            playerWeb.stopLoading()
+            playerWeb.loadUrl("about:blank")
+            playerWeb.destroy()
+            musicEmbedView = null
+            currentMusic = null
+            homePanel.visibility = View.VISIBLE
+            headerBar.visibility = View.VISIBLE
+            statusRow.visibility = View.VISIBLE
+            root.findViewWithTag<View>("top-actions-toggle")?.visibility = View.VISIBLE
+            root.findViewWithTag<View>("top-actions-panel")?.visibility = View.GONE
         }
 
-        fun minimizeToAppBar() {
-            val d = dialog
-            if (d?.isShowing == true) {
-                isMini = true
-                (playerWeb.parent as? ViewGroup)?.removeView(playerWeb)
-                d.dismiss()
-                root.addView(playerWeb, FrameLayout.LayoutParams(-1, dp(90), Gravity.BOTTOM))
-                playerWeb.evaluateJavascript("document.body.classList.add('mini');document.getElementById('minimize').style.display='none';document.getElementById('expand').style.display='inline-block';", null)
-            }
+        fun expandInApp() {
+            mini = false
+            (playerWeb.parent as? ViewGroup)?.removeView(playerWeb)
+            root.addView(playerWeb, FrameLayout.LayoutParams(-1, -1))
+            playerWeb.visibility = View.VISIBLE
+            playerWeb.evaluateJavascript("document.body.classList.remove('mini');document.getElementById('minimize').style.display='inline-block';document.getElementById('expand').style.display='none';", null)
+            playerWeb.requestFocus()
+        }
+
+        fun minimizeInApp() {
+            mini = true
+            (playerWeb.parent as? ViewGroup)?.removeView(playerWeb)
+            root.addView(playerWeb, FrameLayout.LayoutParams(-1, dp(96), Gravity.BOTTOM))
+            playerWeb.visibility = View.VISIBLE
+            playerWeb.evaluateJavascript("document.body.classList.add('mini');document.getElementById('minimize').style.display='none';document.getElementById('expand').style.display='inline-block';", null)
         }
 
         playerWeb.addJavascriptInterface(object {
-            @JavascriptInterface fun minimizePlayer() { runOnUiThread { minimizeToAppBar() } }
+            @JavascriptInterface fun minimizePlayer() { runOnUiThread { minimizeInApp() } }
+            @JavascriptInterface fun expandPlayer() { runOnUiThread { if (mini) expandInApp() } }
             @JavascriptInterface fun requestKeyboard() {
                 runOnUiThread {
                     playerWeb.requestFocus()
+                    playerWeb.requestFocusFromTouch()
                     val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
                     imm.showSoftInput(playerWeb, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
                 }
             }
-            @JavascriptInterface fun expandPlayer() {
-                runOnUiThread {
-                    if (isMini) {
-                        (playerWeb.parent as? ViewGroup)?.removeView(playerWeb)
-                        showExpanded()
-                    }
-                }
-            }
+            @JavascriptInterface fun closePlayer() { runOnUiThread { restoreBrowser() } }
         }, "StreamGurd")
 
-        showExpanded()
+        // Hide the browser home controls while the player is the active app screen.
+        homePanel.visibility = View.GONE
+        headerBar.visibility = View.GONE
+        statusRow.visibility = View.GONE
+        root.findViewWithTag<View>("top-actions-toggle")?.visibility = View.GONE
+        root.findViewWithTag<View>("top-actions-panel")?.visibility = View.GONE
+        root.addView(playerWeb, FrameLayout.LayoutParams(-1, -1))
+        playerWeb.requestFocus()
         try {
             val html = assets.open("music_player.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
             playerWeb.loadDataWithBaseURL("https://appassets.androidplatform.net/", html, "text/html", "UTF-8", null)
         } catch (e: Exception) {
+            restoreBrowser()
             toast("Music player could not be loaded: ${e.message ?: "asset missing"}")
-            dialog?.dismiss()
         }
     }
 
