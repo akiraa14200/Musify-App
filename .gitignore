@@ -1,10 +1,14 @@
 node_modules
 dist
-.wrangler
-.dev.vars
 .env
 .env.*
 !.env.example
-coverage
+data/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.coverage
+.pytest_cache/
 *.log
 .DS_Store
